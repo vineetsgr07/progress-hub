@@ -8,6 +8,7 @@ import { buildAnalyticsInsight } from './analytics-insight.js'
 import { buildWeekProgress, computeDayProgress } from './day-progress.js'
 import { db, getSetting } from './db.js'
 import { buildHabitsProgress } from './habits-history.js'
+import { STREAK_LOOKBACK_DAYS, streakFromDayTotals, streakWindowStart } from './streak.js'
 import {
   filterNotesByScope,
   notesExcerpt,
@@ -26,29 +27,17 @@ import {
 
 export const NOTES_LIST_ORDER_KEY = 'notes_list_order'
 
-function shiftISODate(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  const next = new Date(y, m - 1, d)
-  next.setDate(next.getDate() + days)
-  const yy = next.getFullYear()
-  const mm = String(next.getMonth() + 1).padStart(2, '0')
-  const dd = String(next.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
-}
-
 export async function computeStreak(endDate: string): Promise<number> {
-  const dayDone = await db.prepare(
-    `SELECT COALESCE(SUM(completed), 0) AS c FROM day_entries WHERE date = ?`,
-  )
-  let streak = 0
-  let cursor = endDate
-  for (let i = 0; i < 90; i++) {
-    const row = (await dayDone.get(cursor)) as { c: number }
-    if (Number(row.c) <= 0) break
-    streak += 1
-    cursor = shiftISODate(cursor, -1)
-  }
-  return streak
+  const startDate = streakWindowStart(endDate, STREAK_LOOKBACK_DAYS)
+  const rows = (await db
+    .prepare(
+      `SELECT date, COALESCE(SUM(completed), 0) AS c
+       FROM day_entries
+       WHERE date <= ? AND date >= ?
+       GROUP BY date`,
+    )
+    .all(endDate, startDate)) as Array<{ date: unknown; c: unknown }>
+  return streakFromDayTotals(endDate, rows, STREAK_LOOKBACK_DAYS)
 }
 
 export async function loadDaySessions(date: string) {

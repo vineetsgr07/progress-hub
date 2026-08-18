@@ -29,6 +29,14 @@ type RootSession = SqlSession & {
 const als = new AsyncLocalStorage<SqlSession>()
 
 let rootPromise: Promise<RootSession> | null = null
+let postgresSql: { end: (opts?: { timeout?: number }) => Promise<void> } | null = null
+
+function resetPostgres() {
+  rootPromise = null
+  const sql = postgresSql
+  postgresSql = null
+  if (sql) void sql.end({ timeout: 1 }).catch(() => {})
+}
 
 function localDataPath() {
   const configured = process.env.TRACKER_DB_PATH
@@ -75,40 +83,63 @@ function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
   return next
 }
 
+export function postgresPoolOptions(databaseUrl: string) {
+  return {
+    max: 5,
+    prepare: false as const,
+    ssl: (databaseUrl.includes('localhost') ? false : 'require') as false | 'require',
+    idle_timeout: 8,
+    max_lifetime: 60,
+    connect_timeout: 8,
+    onnotice: () => {},
+  }
+}
+
+export function isDeadDbConnection(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /CONNECTION|ECONNRESET|EPIPE|ECONNREFUSED|not queryable|connection.*closed|timeout|terminat|CLIENT_CLOSED/i.test(
+    message,
+  )
+}
+
 async function createPostgresSession(databaseUrl: string): Promise<RootSession> {
   const postgres = (await import('postgres')).default
-  const sql = postgres(databaseUrl, {
-    max: 1,
-    prepare: false,
-    ssl: databaseUrl.includes('localhost') ? false : 'require',
-    idle_timeout: 20,
-    connect_timeout: 15,
-    onnotice: () => {},
-  })
+  const sql = postgres(databaseUrl, postgresPoolOptions(databaseUrl))
+  postgresSql = sql
 
   const run = async (
     client: ReturnType<typeof postgres>,
     query: string,
     params?: unknown[],
   ): Promise<QueryResult> => {
-    const rows = (await client.unsafe(query, params ?? [])) as unknown as Record<
-      string,
-      unknown
-    >[]
-    const rowCount = Array.isArray(rows) ? rows.length : Number(rows?.count ?? 0)
-    const list = Array.isArray(rows) ? rows.map((row) => coerceRow(row)) : []
-    return {
-      rows: list,
-      rowCount: typeof (rows as { count?: number })?.count === 'number'
-        ? Number((rows as { count: number }).count)
-        : rowCount,
+    try {
+      const rows = (await client.unsafe(query, params ?? [])) as unknown as Record<
+        string,
+        unknown
+      >[]
+      const rowCount = Array.isArray(rows) ? rows.length : Number(rows?.count ?? 0)
+      const list = Array.isArray(rows) ? rows.map((row) => coerceRow(row)) : []
+      return {
+        rows: list,
+        rowCount: typeof (rows as { count?: number })?.count === 'number'
+          ? Number((rows as { count: number }).count)
+          : rowCount,
+      }
+    } catch (error) {
+      if (isDeadDbConnection(error)) resetPostgres()
+      throw error
     }
   }
 
   const sessionFor = (client: ReturnType<typeof postgres>): SqlSession => ({
     query: (query, params) => run(client, query, params),
     exec: async (query) => {
-      await client.unsafe(query)
+      try {
+        await client.unsafe(query)
+      } catch (error) {
+        if (isDeadDbConnection(error)) resetPostgres()
+        throw error
+      }
     },
   })
 
@@ -166,9 +197,13 @@ async function createPgliteSession(dataPath: string): Promise<RootSession> {
 function getRoot(): Promise<RootSession> {
   if (!rootPromise) {
     const databaseUrl = process.env.DATABASE_URL
-    rootPromise = databaseUrl
+    rootPromise = (databaseUrl
       ? createPostgresSession(databaseUrl)
       : createPgliteSession(localDataPath())
+    ).catch((error) => {
+      resetPostgres()
+      throw error
+    })
   }
   return rootPromise
 }
@@ -193,9 +228,17 @@ async function execSql(sql: string): Promise<void> {
 }
 
 async function querySql(sql: string, params?: SqlParams): Promise<QueryResult> {
-  const s = await session()
   const bound = bindSql(sql, params)
-  return s.query(bound.text, bound.args)
+  try {
+    const s = await session()
+    return await s.query(bound.text, bound.args)
+  } catch (error) {
+    if (als.getStore() || !process.env.DATABASE_URL || !isDeadDbConnection(error)) {
+      throw error
+    }
+    const s = await session()
+    return s.query(bound.text, bound.args)
+  }
 }
 
 export type Statement = {
