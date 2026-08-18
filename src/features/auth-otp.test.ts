@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { parseEmailOtpInput } from './auth-otp.ts'
+import { otpSendErrorMessage, parseEmailOtpInput } from './auth-otp.ts'
+import { authCopy } from './auth-copy.ts'
 
 assert.deepEqual(parseEmailOtpInput('123456'), { kind: 'token', token: '123456' })
 assert.deepEqual(parseEmailOtpInput(' 12 34 56 '), { kind: 'token', token: '123456' })
@@ -29,5 +30,21 @@ assert.deepEqual(parseEmailOtpInput('pkce_hashed_token_value_here'), {
   tokenHash: 'pkce_hashed_token_value_here',
   type: 'email',
 })
+
+assert.equal(
+  otpSendErrorMessage(
+    { status: 429, code: 'over_email_send_rate_limit', message: 'email rate limit exceeded' },
+    authCopy,
+  ),
+  authCopy.otpRateLimit,
+)
+assert.equal(
+  otpSendErrorMessage(
+    { message: 'For security purposes, you can only request this after 60 seconds.' },
+    authCopy,
+  ),
+  authCopy.otpWait,
+)
+assert.equal(otpSendErrorMessage({ message: 'nope' }, authCopy), authCopy.otpError)
 
 console.log('auth-otp tests passed')

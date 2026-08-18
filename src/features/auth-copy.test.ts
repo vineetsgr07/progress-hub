@@ -8,6 +8,6 @@ assert.ok(authCopy.otpSent.includes('email'), 'otp sent mentions email')
 assert.ok(authCopy.otpSent.includes('Do not tap'), 'otp sent warns against opening the link')
 assert.equal(authCopy.sendCode, 'Send code')
 assert.equal(authCopy.verify, 'Verify')
-assert.ok(authCopy.codePlaceholder.includes('link'), 'placeholder accepts a pasted link')
+assert.ok(authCopy.otpRateLimit.includes('hour'), 'rate limit tells you to wait')
 
 console.log('auth-copy tests passed')

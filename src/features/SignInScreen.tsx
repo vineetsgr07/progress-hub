@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
 import { authCopy } from './auth-copy'
-import { parseEmailOtpInput } from './auth-otp'
+import { parseEmailOtpInput, otpSendErrorMessage } from './auth-otp'
 import { isStandalonePwa } from './pwa-display'
 import { getSupabase } from '../supabase'
 
@@ -43,7 +43,7 @@ export function SignInScreen({
     })
     setBusy(false)
     if (sendError) {
-      setError(authCopy.otpError)
+      setError(otpSendErrorMessage(sendError, authCopy))
       return
     }
     setEmail(trimmed)

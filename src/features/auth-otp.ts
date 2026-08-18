@@ -51,3 +51,22 @@ export function parseEmailOtpInput(raw: string): EmailOtpVerify | null {
 
   return null
 }
+
+export function otpSendErrorMessage(
+  error: { message?: string; code?: string; status?: number } | null,
+  copy: { otpError: string; otpRateLimit: string; otpWait: string },
+): string {
+  const message = (error?.message || '').toLowerCase()
+  const code = (error?.code || '').toLowerCase()
+  if (
+    error?.status === 429 ||
+    code.includes('over_email_send_rate_limit') ||
+    message.includes('rate limit')
+  ) {
+    return copy.otpRateLimit
+  }
+  if (message.includes('after 60 seconds') || message.includes('security purposes')) {
+    return copy.otpWait
+  }
+  return copy.otpError
+}

@@ -15,6 +15,9 @@ export const authCopy = {
   otpSent:
     'Check your email. If you got a Sign in link, long-press it, Copy, and paste it below. Do not tap the link — that opens Safari and burns the token.',
   otpError: 'Could not send a code. Try again.',
+  otpRateLimit:
+    'Too many sign-in emails. Wait about an hour, then send once. If an unread Sign in mail is still in the inbox, paste that link instead.',
+  otpWait: 'Wait a minute, then send once.',
   verifyError: 'That code is not valid. Try again.',
   signOut: 'Sign out',
   forbidden: 'This account is not allowed on this tracker.',
