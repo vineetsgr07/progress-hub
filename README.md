@@ -20,7 +20,7 @@ On iPhone (Safari, not in-app browsers):
 
 1. Open `https://progressive-hub.vercel.app`.
 2. Share → **Add to Home Screen**.
-3. Launch the icon. First sign-in uses an **email 6-digit code** (stays inside the app). Google sign-in stays on regular Safari tabs.
+3. Launch the icon. First sign-in uses email. Free-tier Supabase sends a **Sign in link**, not a 6-digit code. Long-press the link → **Copy** → paste it in the app. Do not tap the link (that opens Safari and burns the token). Google sign-in stays on regular Safari tabs.
 
 Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: true`). Open `http://<your-lan-ip>:5173`. Add to Home Screen needs the Vercel deploy.
 

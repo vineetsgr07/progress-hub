@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
 import { authCopy } from './auth-copy'
+import { parseEmailOtpInput } from './auth-otp'
 import { isStandalonePwa } from './pwa-display'
 import { getSupabase } from '../supabase'
 
@@ -51,15 +52,21 @@ export function SignInScreen({
 
   async function verifyCode() {
     const supabase = getSupabase()
-    const token = code.replace(/\s/g, '')
-    if (!supabase || token.length < 6) return
+    const parsed = parseEmailOtpInput(code)
+    if (!supabase || !parsed) return
     setBusy(true)
     setError(null)
-    const { error: verifyErr } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token,
-      type: 'email',
-    })
+    const { error: verifyErr } =
+      parsed.kind === 'token'
+        ? await supabase.auth.verifyOtp({
+            email: email.trim().toLowerCase(),
+            token: parsed.token,
+            type: 'email',
+          })
+        : await supabase.auth.verifyOtp({
+            token_hash: parsed.tokenHash,
+            type: parsed.type,
+          })
     setBusy(false)
     if (verifyErr) setError(authCopy.verifyError)
   }
@@ -93,14 +100,13 @@ export function SignInScreen({
                   placeholder={authCopy.codePlaceholder}
                   value={code}
                   onChange={(event) => setCode(event.currentTarget.value)}
-                  inputMode="numeric"
                   autoComplete="one-time-code"
                   disabled={busy}
                 />
                 <Button
                   color="dark"
                   loading={busy}
-                  disabled={code.replace(/\s/g, '').length < 6}
+                  disabled={!parseEmailOtpInput(code)}
                   onClick={() => void verifyCode()}
                 >
                   {authCopy.verify}
