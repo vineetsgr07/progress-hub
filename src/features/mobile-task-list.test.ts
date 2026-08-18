@@ -69,6 +69,21 @@ assert.match(
   'tablet Now tasks drop the grip column',
 )
 assert.match(
+  tablet,
+  /\.now-item \.list-drag-handle,\s*\n\s*\.now-item \.subtask-drag-handle\s*\{[^}]*display:\s*none/,
+  'tablet Now hides the grip so the grid cannot grow an extra column',
+)
+assert.match(
+  css,
+  /\.now-view\s*\{[^}]*overflow-x:\s*clip/,
+  'Now column clips horizontal overflow',
+)
+assert.match(
+  css,
+  /\.hub-body:has\(\.now-view\)\s*\{[^}]*overflow-x:\s*hidden/,
+  'Now hub body does not pan sideways',
+)
+assert.match(
   css,
   /\.now-view\s*\{[^}]*margin-inline:\s*auto/,
   'Now column is centered in the hub track',
@@ -259,13 +274,23 @@ const phoneNow = mediaBlocks(520)[0]
 assert.ok(phoneNow, 'missing 520px Now / checklist wrap query')
 assert.match(
   phoneNow,
-  /\.now-item:has\(\.now-item-actions\)/,
-  'phone Now rows with actions wrap pin and timer under the title',
+  /\.now-item:has\(\.now-item-actions\),\s*\n\s*\.now-item\.is-sortable\s*\{[^}]*grid-template-columns:\s*18px minmax\(0,\s*1fr\) auto/,
+  'phone Now rows keep check | title | actions on one line',
+)
+assert.doesNotMatch(
+  phoneNow,
+  /\.now-item:has\(\.now-item-actions\)[^{]*\{[^}]*grid-template-areas:/,
+  'phone Now rows must not wrap pin and timer under the title',
 )
 assert.match(
   phoneNow,
-  /\.now-reminder-add\s*\{[^}]*flex-direction:\s*column/,
-  'phone reminder composer stacks title, time, and add',
+  /\.now-reminder-add\s*\{[^}]*flex-direction:\s*row/,
+  'phone reminder composer stays on one line',
+)
+assert.match(
+  phoneNow,
+  /\.now-reminder-add\s*\{[^}]*flex-wrap:\s*nowrap/,
+  'phone reminder composer does not wrap onto a second line',
 )
 
 const viewport = html.match(/<meta name="viewport"[^>]*>/)?.[0] ?? ''

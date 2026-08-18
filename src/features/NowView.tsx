@@ -340,9 +340,10 @@ export function NowView({
             variant="default"
             size="xs"
             disabled={busy || !draft.trim()}
+            aria-label={nowCopy.addReminder}
             onClick={() => void addReminder()}
           >
-            {nowCopy.addReminder}
+            {nowCopy.addReminderShort}
           </Button>
         </div>
       </section>

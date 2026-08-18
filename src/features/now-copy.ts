@@ -3,8 +3,8 @@ export const nowCopy = {
   tasks: 'Tasks',
   habits: 'Habits',
   reminders: 'Reminders',
-  emptyTasks: 'Pin a checklist item from Today to work on it here.',
-  emptyHabits: 'Add habits on Today — they show up here each day.',
+  emptyTasks: 'Pin a checklist item from Today.',
+  emptyHabits: 'Add habits on Today.',
   emptyReminders: 'Nothing waiting. Add a reminder.',
   stillOpen: (date: string) => `Still open from ${date}`,
   stillOpenTimed: (date: string, time: string) =>
@@ -15,6 +15,7 @@ export const nowCopy = {
   showAllAria: 'Show completed habits',
   hideDoneAria: 'Hide completed habits',
   addReminder: 'Add a reminder',
+  addReminderShort: 'Add',
   addPlaceholder: '+ Add a reminder',
   timeAria: 'Reminder time',
   pin: 'Pin to Now',
