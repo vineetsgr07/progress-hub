@@ -1,0 +1,597 @@
+import {
+  cadenceOptsFromRow,
+  isPeriodCategory,
+  previousCadenceDay,
+  visibleOnToday,
+} from './cadence.js'
+import { buildAnalyticsInsight } from './analytics-insight.js'
+import { buildWeekProgress, computeDayProgress } from './day-progress.js'
+import { db, getSetting } from './db.js'
+import { buildHabitsProgress } from './habits-history.js'
+import {
+  filterNotesByScope,
+  notesExcerpt,
+  notesHasBody,
+  notesRecentCutoff,
+  parseNoteScope,
+  parseNoteSort,
+  parseNoteSource,
+  parseNotesListOrder,
+  sortNoteItems,
+  type NoteListItem,
+  type NoteScope,
+  type NoteSort,
+  type NoteSource,
+} from './notes-list.js'
+
+export const NOTES_LIST_ORDER_KEY = 'notes_list_order'
+
+function shiftISODate(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const next = new Date(y, m - 1, d)
+  next.setDate(next.getDate() + days)
+  const yy = next.getFullYear()
+  const mm = String(next.getMonth() + 1).padStart(2, '0')
+  const dd = String(next.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+export async function computeStreak(endDate: string): Promise<number> {
+  const dayDone = await db.prepare(
+    `SELECT COALESCE(SUM(completed), 0) AS c FROM day_entries WHERE date = ?`,
+  )
+  let streak = 0
+  let cursor = endDate
+  for (let i = 0; i < 90; i++) {
+    const row = (await dayDone.get(cursor)) as { c: number }
+    if (Number(row.c) <= 0) break
+    streak += 1
+    cursor = shiftISODate(cursor, -1)
+  }
+  return streak
+}
+
+export async function loadDaySessions(date: string) {
+  const rows = (await db
+    .prepare(
+      `SELECT tl.id, tl.task_id, tl.hours, tl.created_at, tl.subtask_id,
+              t.title, t.project_tag, t.priority,
+              s.title AS subtask_title
+       FROM time_logs tl
+       JOIN tasks t ON t.id = tl.task_id
+       LEFT JOIN subtasks s ON s.id = tl.subtask_id
+       WHERE tl.date = ?
+       ORDER BY tl.created_at ASC`,
+    )
+    .all(date)) as Array<Record<string, unknown>>
+
+  const sessions = rows.map((row) => ({
+    id: String(row.id),
+    taskId: String(row.task_id),
+    title: String(row.title),
+    projectTag: String(row.project_tag),
+    priority: String(row.priority),
+    subtaskId: row.subtask_id == null ? null : String(row.subtask_id),
+    subtaskTitle: row.subtask_title == null ? null : String(row.subtask_title),
+    hours: Number(row.hours),
+    createdAt: String(row.created_at),
+    running: false,
+  }))
+
+  const running = (await db
+    .prepare(
+      `SELECT d.id, d.task_id, d.timer_started_at, d.timer_subtask_id,
+              t.title, t.project_tag, t.priority,
+              s.title AS subtask_title
+       FROM day_entries d
+       JOIN tasks t ON t.id = d.task_id
+       LEFT JOIN subtasks s ON s.id = d.timer_subtask_id
+       WHERE d.date = ? AND d.timer_started_at IS NOT NULL`,
+    )
+    .all(date)) as Array<Record<string, unknown>>
+
+  for (const r of running) {
+    const started = new Date(String(r.timer_started_at)).getTime()
+    const live = Number.isFinite(started)
+      ? Math.max(0, (Date.now() - started) / 3_600_000)
+      : 0
+    sessions.push({
+      id: `live-${r.id}`,
+      taskId: String(r.task_id),
+      title: String(r.title),
+      projectTag: String(r.project_tag),
+      priority: String(r.priority),
+      subtaskId: r.timer_subtask_id == null ? null : String(r.timer_subtask_id),
+      subtaskTitle: r.subtask_title == null ? null : String(r.subtask_title),
+      hours: live,
+      createdAt: String(r.timer_started_at),
+      running: true,
+    })
+  }
+
+  return sessions
+}
+
+export async function loadStats(
+  date: string,
+  opts?: { insight?: boolean; streak?: number | false },
+) {
+  const day = await computeDayProgress(date)
+  const taskIds = day.taskIds
+  const withInsight = Boolean(opts?.insight)
+
+  let checklistDone = 0
+  let checklistTotal = 0
+  if (taskIds.length > 0) {
+    const placeholders = taskIds.map(() => '?').join(',')
+    const checklist = (await db
+      .prepare(
+        `SELECT
+           COUNT(*) AS total,
+           SUM(
+             CASE
+               WHEN t.category = 'Daily' THEN COALESCE(sds.done, 0)
+               WHEN s.done = 1 THEN 1
+               ELSE 0
+             END
+           ) AS done
+         FROM subtasks s
+         JOIN tasks t ON t.id = s.task_id
+         LEFT JOIN subtask_day_state sds
+           ON sds.subtask_id = s.id AND sds.date = ?
+         WHERE s.task_id IN (${placeholders})`,
+      )
+      .get(date, ...taskIds)) as { total: number; done: number | null }
+    checklistTotal = Number(checklist.total)
+    checklistDone = Number(checklist.done ?? 0)
+  }
+
+  const history = withInsight
+    ? await db
+        .prepare(
+          `SELECT date,
+                  SUM(completed) AS completed,
+                  COUNT(*) AS total,
+                  ROUND((SUM(hours))::numeric, 2)::float AS hours
+           FROM day_entries
+           GROUP BY date
+           ORDER BY date DESC
+           LIMIT 30`,
+        )
+        .all()
+    : []
+
+  const insight = withInsight ? await buildAnalyticsInsight(date, 14) : null
+  const byCategory = insight
+    ? insight.hoursByCategory.map((row) => ({
+        category: row.key,
+        count: row.count,
+        done: row.done,
+        hours: row.hours,
+        sharePercent: row.sharePercent,
+        priorHours: row.priorHours,
+      }))
+    : (
+        (await db
+          .prepare(
+            `SELECT category AS key,
+                    COUNT(*) AS count,
+                    SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
+             FROM tasks
+             WHERE is_master = 1
+             GROUP BY category`,
+          )
+          .all()) as Array<{ key: string; count: number; done: number }>
+      ).map((row) => ({
+        category: row.key,
+        count: Number(row.count),
+        done: Number(row.done),
+        hours: 0,
+      }))
+  const byProject = insight
+    ? insight.hoursByProject.map((row) => ({
+        projectTag: row.key,
+        count: row.count,
+        done: row.done,
+        hours: row.hours,
+        sharePercent: row.sharePercent,
+        priorHours: row.priorHours,
+      }))
+    : []
+
+  const remaining = Math.max(0, day.total - day.completed)
+  const sessions = await loadDaySessions(date)
+  const streak =
+    opts?.streak === false
+      ? 0
+      : typeof opts?.streak === 'number'
+        ? opts.streak
+        : await computeStreak(date)
+
+  return {
+    date,
+    today: {
+      completed: day.completed,
+      total: day.total,
+      remaining,
+      hours: day.hours,
+      percent: day.percent,
+      checklistDone,
+      checklistTotal,
+      checklistPercent: checklistTotal
+        ? Math.round((checklistDone / checklistTotal) * 100)
+        : 0,
+    },
+    streak,
+    history,
+    byCategory,
+    byProject,
+    sessions,
+    insight: insight
+      ? {
+          rangeStart: insight.rangeStart,
+          rangeEnd: insight.rangeEnd,
+          unfinishedDaily: insight.unfinishedDaily,
+          unfinishedDailyTotalHours: insight.unfinishedDailyTotalHours,
+          goals: insight.goals,
+          todayBudget: insight.todayBudget,
+          budgetSeries: insight.budgetSeries,
+        }
+      : undefined,
+  }
+}
+
+export async function loadWeek(date: string, streak?: number) {
+  const week = await buildWeekProgress(date)
+  return {
+    date,
+    ...week,
+    streak: streak ?? (await computeStreak(date)),
+  }
+}
+
+export async function loadTodayPulse(date: string) {
+  const [statsCore, weekCore, streak] = await Promise.all([
+    loadStats(date, { insight: false, streak: false }),
+    buildWeekProgress(date),
+    computeStreak(date),
+  ])
+  return {
+    stats: { ...statsCore, streak },
+    week: { date, ...weekCore, streak },
+  }
+}
+
+export type TaskListOpts = {
+  category?: string | null
+  master?: boolean
+}
+
+export async function loadTaskRows(
+  date: string,
+  opts?: TaskListOpts,
+): Promise<Record<string, unknown>[]> {
+  const category = opts?.category ?? null
+  const masterOnly = Boolean(opts?.master)
+
+  let rows: Record<string, unknown>[]
+  if (masterOnly) {
+    rows = (await db
+      .prepare(
+        `SELECT * FROM tasks WHERE is_master = 1
+         ${category && category !== 'All' ? 'AND category = @category' : ''}
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all(category && category !== 'All' ? { category } : {})) as Record<
+      string,
+      unknown
+    >[]
+  } else if (category && isPeriodCategory(category)) {
+    rows = (await db
+      .prepare(
+        `SELECT * FROM tasks WHERE is_master = 1 AND category = ?
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all(category)) as Record<string, unknown>[]
+  } else if (category && category !== 'All') {
+    rows = (await db
+      .prepare(
+        `SELECT * FROM tasks WHERE is_master = 1 AND category = ?
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all(category)) as Record<string, unknown>[]
+  } else {
+    rows = (await db
+      .prepare(
+        `SELECT * FROM tasks WHERE is_master = 1
+         AND category NOT IN (
+           'Weekly', 'Monthly', 'Quarterly', 'Goal', 'Projects', 'Transactional'
+         )
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all()) as Record<string, unknown>[]
+
+    const projectOnDay = (await db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         INNER JOIN day_entries d ON d.task_id = t.id AND d.date = ?
+         WHERE t.is_master = 1
+           AND t.category IN ('Projects', 'Transactional')
+         ORDER BY t.sort_order ASC, t.created_at ASC`,
+      )
+      .all(date)) as Record<string, unknown>[]
+    rows.push(...projectOnDay)
+
+    const periodRows = (await db
+      .prepare(
+        `SELECT * FROM tasks WHERE is_master = 1
+         AND category IN ('Weekly', 'Monthly', 'Quarterly', 'Goal')
+         ORDER BY sort_order ASC, created_at ASC`,
+      )
+      .all()) as Record<string, unknown>[]
+
+    const completedBeforeStmt = await db.prepare(
+      `SELECT 1 AS ok FROM day_entries
+       WHERE task_id = ? AND completed = 1 AND date >= ? AND date < ?
+       LIMIT 1`,
+    )
+
+    for (const row of periodRows) {
+      const cat = String(row.category)
+      const createdDateISO = String(row.created_at || '').slice(0, 10)
+      const cadenceOpts = cadenceOptsFromRow({
+        category: cat,
+        cadence_weekday:
+          row.cadence_weekday == null ? null : Number(row.cadence_weekday),
+        cadence_month_day:
+          row.cadence_month_day == null ? null : Number(row.cadence_month_day),
+      })
+      const prev = previousCadenceDay(cat, date, cadenceOpts)
+      const occurrenceCompletedBeforeDate = prev
+        ? Boolean(await completedBeforeStmt.get(String(row.id), prev, date))
+        : false
+      if (
+        !visibleOnToday(
+          cat,
+          date,
+          occurrenceCompletedBeforeDate,
+          null,
+          createdDateISO || null,
+          cadenceOpts,
+        )
+      ) {
+        continue
+      }
+      rows.push(row)
+    }
+    rows.sort((a, b) => {
+      const so = Number(a.sort_order) - Number(b.sort_order)
+      if (so !== 0) return so
+      return String(a.created_at).localeCompare(String(b.created_at))
+    })
+  }
+
+  return rows
+}
+
+export function mapHabit(
+  row: Record<string, unknown>,
+  entry?: { completed: number } | null,
+) {
+  return {
+    id: String(row.id),
+    title: String(row.title ?? ''),
+    sortOrder: Number(row.sort_order ?? 0),
+    archived: Boolean(row.archived),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    completed: entry ? Boolean(entry.completed) : false,
+  }
+}
+
+export async function loadHabits(
+  date: string,
+  opts?: { includeArchived?: boolean },
+) {
+  const includeArchived = Boolean(opts?.includeArchived)
+  const habits = (await db
+    .prepare(
+      includeArchived
+        ? `SELECT * FROM habits ORDER BY sort_order ASC, created_at ASC`
+        : `SELECT * FROM habits WHERE archived = 0 ORDER BY sort_order ASC, created_at ASC`,
+    )
+    .all()) as Array<Record<string, unknown>>
+
+  const entryStmt = await db.prepare(
+    `SELECT completed FROM habit_entries WHERE habit_id = ? AND date = ?`,
+  )
+
+  let completed = 0
+  const mapped = []
+  for (const row of habits) {
+    const entry = (await entryStmt.get(String(row.id), date)) as
+      | { completed: number }
+      | undefined
+    if (entry?.completed) completed += 1
+    mapped.push(mapHabit(row, entry ?? null))
+  }
+
+  return {
+    date,
+    habits: mapped,
+    summary: { completed, total: mapped.length },
+  }
+}
+
+export async function loadHabitsProgress(days = 28) {
+  return buildHabitsProgress(days)
+}
+
+export async function readNotesListOrder(): Promise<string[]> {
+  return parseNotesListOrder(await getSetting(NOTES_LIST_ORDER_KEY))
+}
+
+export type NotesQuery = {
+  q?: string
+  project?: string
+  priority?: string
+  source?: string
+  sort?: string
+  scope?: string
+}
+
+export async function loadNotes(opts?: NotesQuery): Promise<{
+  notes: NoteListItem[]
+  olderCount: number
+}> {
+  const q = String(opts?.q || '')
+    .trim()
+    .toLowerCase()
+  const project = String(opts?.project || '').trim()
+  const priority = String(opts?.priority || '').trim()
+  const sourceFilter = parseNoteSource(String(opts?.source || ''))
+  const sort = parseNoteSort(String(opts?.sort || ''))
+  const scope = parseNoteScope(String(opts?.scope || ''))
+  return loadNotesResolved({ q, project, priority, sourceFilter, sort, scope })
+}
+
+async function loadNotesResolved(opts: {
+  q: string
+  project: string
+  priority: string
+  sourceFilter: NoteSource | 'all'
+  sort: NoteSort
+  scope: NoteScope
+}): Promise<{ notes: NoteListItem[]; olderCount: number }> {
+  const items: NoteListItem[] = []
+
+  if (opts.sourceFilter === 'all' || opts.sourceFilter === 'task') {
+    const tasks = (await db
+      .prepare(
+        `SELECT id, title, notes, project_tag, priority, created_at, updated_at
+         FROM tasks
+         WHERE TRIM(notes) != ''`,
+      )
+      .all()) as Array<Record<string, unknown>>
+    for (const row of tasks) {
+      const body = String(row.notes ?? '')
+      if (!notesHasBody(body)) continue
+      items.push({
+        id: String(row.id),
+        source: 'task',
+        title: String(row.title ?? ''),
+        excerpt: notesExcerpt(body),
+        projectTag: String(row.project_tag ?? ''),
+        priority: String(row.priority ?? 'Medium'),
+        pinned: false,
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+      })
+    }
+  }
+
+  if (opts.sourceFilter === 'all' || opts.sourceFilter === 'note') {
+    const notes = (await db
+      .prepare(
+        `SELECT id, title, body, project_tag, priority, pinned, created_at, updated_at
+         FROM standalone_notes`,
+      )
+      .all()) as Array<Record<string, unknown>>
+    for (const row of notes) {
+      items.push({
+        id: String(row.id),
+        source: 'note',
+        title: String(row.title ?? '') || 'Untitled note',
+        excerpt: notesExcerpt(String(row.body ?? '')),
+        projectTag: String(row.project_tag ?? 'Personal'),
+        priority: String(row.priority ?? 'Medium'),
+        pinned: Boolean(row.pinned),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+      })
+    }
+  }
+
+  let filtered = items
+  if (opts.project) {
+    filtered = filtered.filter((n) => n.projectTag === opts.project)
+  }
+  if (opts.priority) {
+    filtered = filtered.filter((n) => n.priority === opts.priority)
+  }
+  if (opts.q) {
+    filtered = filtered.filter(
+      (n) =>
+        n.title.toLowerCase().includes(opts.q) ||
+        n.excerpt.toLowerCase().includes(opts.q) ||
+        n.projectTag.toLowerCase().includes(opts.q),
+    )
+  }
+
+  const cutoff = notesRecentCutoff()
+  const olderCount =
+    opts.scope === 'recent'
+      ? filterNotesByScope(filtered, 'older', cutoff).length
+      : 0
+  const scoped = filterNotesByScope(filtered, opts.scope, cutoff)
+  const manualOrder = opts.sort === 'manual' ? await readNotesListOrder() : []
+  return {
+    notes: sortNoteItems(scoped, opts.sort, manualOrder),
+    olderCount,
+  }
+}
+
+export async function loadTodayPage<T>(
+  opts: { date: string; category?: string | null; master?: boolean },
+  mapTasks: (rows: Record<string, unknown>[], date: string) => Promise<T[]>,
+) {
+  const { date, category = null, master = false } = opts
+  const includeHabitsWeek = !master && category !== 'Projects'
+  const includeNotes = !master
+
+  const tasksPromise = loadTaskRows(date, { category, master }).then((rows) =>
+    mapTasks(rows, date),
+  )
+
+  if (master) {
+    const [tasks, stats] = await Promise.all([
+      tasksPromise,
+      loadStats(date, { insight: false }),
+    ])
+    return { date, tasks, stats }
+  }
+
+  if (!includeHabitsWeek) {
+    const [tasks, stats, notes] = await Promise.all([
+      tasksPromise,
+      loadStats(date, { insight: false }),
+      includeNotes
+        ? loadNotes({ sort: 'updated', scope: 'recent' })
+        : Promise.resolve(undefined),
+    ])
+    return { date, tasks, stats, notes }
+  }
+
+  const [tasks, pulse, habits, notes] = await Promise.all([
+    tasksPromise,
+    loadTodayPulse(date),
+    loadHabits(date),
+    loadNotes({ sort: 'updated', scope: 'recent' }),
+  ])
+  return {
+    date,
+    tasks,
+    stats: pulse.stats,
+    week: pulse.week,
+    habits,
+    notes,
+  }
+}
+
+export async function loadAnalyticsPage(date: string) {
+  const [stats, habitsProgress] = await Promise.all([
+    loadStats(date, { insight: true }),
+    loadHabitsProgress(28),
+  ])
+  return { date, stats, habitsProgress }
+}

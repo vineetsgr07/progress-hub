@@ -1,0 +1,133 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const css = readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '../index.css'),
+  'utf8',
+)
+
+function mediaBlocks(maxWidth: number): string[] {
+  const needle = `@media (max-width: ${maxWidth}px)`
+  const blocks: string[] = []
+  let from = 0
+  while (from < css.length) {
+    const start = css.indexOf(needle, from)
+    if (start < 0) break
+    const open = css.indexOf('{', start)
+    let depth = 0
+    for (let i = open; i < css.length; i += 1) {
+      if (css[i] === '{') depth += 1
+      else if (css[i] === '}') {
+        depth -= 1
+        if (depth === 0) {
+          blocks.push(css.slice(start, i + 1))
+          from = i + 1
+          break
+        }
+      }
+    }
+  }
+  assert.ok(blocks.length > 0, `missing @media (max-width: ${maxWidth}px)`)
+  return blocks
+}
+
+const phone = mediaBlocks(900).find((block) =>
+  block.includes('grid-template-areas'),
+)
+const tablet = mediaBlocks(1100)[0]
+assert.ok(phone, 'missing phone task-list media query')
+
+assert.doesNotMatch(
+  css,
+  /margin-left:\s*52px/,
+  'phone task status must not keep the 52px table indent',
+)
+assert.doesNotMatch(
+  phone,
+  /\.task-row\s*>\s*\.task-controls\s*\{[^}]*padding-left:\s*36px/,
+  'phone task controls must not keep the 36px left pad',
+)
+assert.match(
+  css,
+  /\.task-row-draggable\s*\{[^}]*touch-action:\s*pan-y/,
+  'task rows must allow vertical scroll before a touch drag',
+)
+assert.match(
+  tablet,
+  /\.task-row\s*>\s*\.list-drag-handle\s*\{[^}]*display:\s*none/,
+  'tablet task rows hide the drag-handle column',
+)
+assert.match(
+  phone,
+  /\.task-row\s*>\s*\.list-drag-handle\s*\{[^}]*display:\s*none/,
+  'phone task rows hide the drag-handle column',
+)
+assert.match(
+  tablet,
+  /\.subtask-panel\s*\{[^}]*padding:\s*4px 12px 10px 28px/,
+  'tablet subtasks nest under the title, not the 48px desktop gutter',
+)
+assert.doesNotMatch(
+  tablet,
+  /padding-left:\s*48px/,
+  'tablet media query must not leave the 48px desktop subtask indent',
+)
+assert.match(
+  phone,
+  /\.subtask-panel\s*\{[^}]*padding:\s*2px 8px 6px 28px/,
+  'phone subtasks nest under the title, not 12px or 48px',
+)
+assert.match(
+  phone,
+  /\.subtask-drag-handle\s*\{[^}]*display:\s*none/,
+  'phone subtask grip is hidden',
+)
+assert.match(
+  phone,
+  /grid-template-areas:\s*"check main controls"/,
+  'phone task row is checkbox | title | controls',
+)
+assert.doesNotMatch(
+  phone,
+  /"\.\s+status\s+status"/,
+  'phone task row must not keep a second status row',
+)
+assert.match(
+  phone,
+  /\.task-meta-status\s*\{[^}]*display:\s*none/,
+  'phone list hides status — it lives in the task sheet',
+)
+assert.doesNotMatch(
+  phone,
+  /\.time-control\s*\{[^}]*height:\s*36px/,
+  'phone timer must stay 28px, not inflate to 36px',
+)
+assert.doesNotMatch(
+  phone,
+  /\.icon-btn[^{]*\{[^}]*min-height:\s*36px/,
+  'phone row icons must stay 28px, not inflate to 36px',
+)
+assert.match(
+  phone,
+  /\.focus-reentry\s*\{[^}]*display:\s*none/,
+  'phone hides the Open focus chip so the row stays one line',
+)
+assert.match(
+  phone,
+  /\.filters\s*\{[^}]*flex-wrap:\s*nowrap/,
+  'phone category chips stay on one line',
+)
+assert.match(
+  phone,
+  /\.filter-chip\s*\{[^}]*flex:\s*1 1 0/,
+  'phone category chips share the row equally',
+)
+assert.doesNotMatch(
+  phone,
+  /\.filter-chip\s*\{[^}]*flex-shrink:\s*0/,
+  'phone category chips must not refuse to shrink',
+)
+
+console.log('mobile-task-list.test.ts: ok')

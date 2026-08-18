@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Progress Hub">
+  <rect width="512" height="512" fill="#152033"/>
+  <rect x="112" y="148" width="288" height="52" rx="26" fill="#ededed"/>
+  <rect x="112" y="230" width="207" height="52" rx="26" fill="#ededed"/>
+  <rect x="112" y="312" width="121" height="52" rx="26" fill="#14965c"/>
+</svg>
