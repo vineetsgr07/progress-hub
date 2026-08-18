@@ -5,7 +5,11 @@ import {
   visibleOnToday,
 } from './cadence.js'
 import { buildAnalyticsInsight } from './analytics-insight.js'
-import { buildWeekProgress, computeDayProgress } from './day-progress.js'
+import {
+  loadWeekBundle,
+  computeDayProgress,
+  type DayProgress,
+} from './day-progress.js'
 import { db, getSetting } from './db.js'
 import { buildHabitsProgress } from './habits-history.js'
 import { STREAK_LOOKBACK_DAYS, isoDateKey, streakFromDayTotals, streakWindowStart } from './streak.js'
@@ -103,9 +107,9 @@ export async function loadDaySessions(date: string) {
 
 export async function loadStats(
   date: string,
-  opts?: { insight?: boolean; streak?: number | false },
+  opts?: { insight?: boolean; streak?: number | false; day?: DayProgress },
 ) {
-  const day = await computeDayProgress(date)
+  const day = opts?.day ?? (await computeDayProgress(date))
   const taskIds = day.taskIds
   const withInsight = Boolean(opts?.insight)
 
@@ -231,7 +235,7 @@ export async function loadStats(
 }
 
 export async function loadWeek(date: string, streak?: number) {
-  const week = await buildWeekProgress(date)
+  const { week } = await loadWeekBundle(date)
   return {
     date,
     ...week,
@@ -240,14 +244,14 @@ export async function loadWeek(date: string, streak?: number) {
 }
 
 export async function loadTodayPulse(date: string) {
-  const [statsCore, weekCore, streak] = await Promise.all([
-    loadStats(date, { insight: false, streak: false }),
-    buildWeekProgress(date),
+  const { week, day } = await loadWeekBundle(date)
+  const [statsCore, streak] = await Promise.all([
+    loadStats(date, { insight: false, streak: false, day }),
     computeStreak(date),
   ])
   return {
     stats: { ...statsCore, streak },
-    week: { date, ...weekCore, streak },
+    week: { date, ...week, streak },
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   cadenceOptsFromRow,
+  isPeriodCategory,
   previousCadenceDay,
   visibleOnToday,
 } from './cadence.js'
@@ -204,33 +205,59 @@ function progressForDate(
 }
 
 /**
- * Cadence-honest Today-All progress for many calendar days in two queries.
- * Live timers only contribute when a date is the real local today.
+ * Cadence-honest Today-All progress for many calendar days.
+ * Day rows are only fetched for the requested dates; period overflow uses a
+ * completed-only lookback for Weekly/Monthly/Quarterly/Goal tasks.
  */
 export async function computeDaysProgress(dates: string[]): Promise<DayProgress[]> {
   if (dates.length === 0) return []
   const unique = [...new Set(dates)]
   const minDate = unique.reduce((a, b) => (a < b ? a : b))
   const maxDate = unique.reduce((a, b) => (a > b ? a : b))
-  const lookbackStart = shiftISODate(minDate, -CADENCE_LOOKBACK_DAYS)
   const today = todayISO()
 
-  const [taskRows, entryRows] = await Promise.all([
-    db
+  const taskRows = (await db
+    .prepare(
+      `SELECT id, category, created_at, cadence_weekday, cadence_month_day
+       FROM tasks
+       WHERE is_master = 1`,
+    )
+    .all()) as MasterTaskRow[]
+
+  const tasks = taskRows.map((row) => ({
+    ...row,
+    id: String(row.id),
+    category: String(row.category),
+    created_at: String(row.created_at ?? ''),
+  }))
+
+  const datePlaceholders = unique.map(() => '?').join(',')
+  const entryRows = (await db
+    .prepare(
+      `SELECT task_id, date, completed, hours, timer_started_at
+       FROM day_entries
+       WHERE date IN (${datePlaceholders})`,
+    )
+    .all(...unique)) as DayEntryLite[]
+
+  const periodIds = tasks
+    .filter((row) => isPeriodCategory(row.category))
+    .map((row) => row.id)
+  let completedRows: Array<{ task_id: string; date: unknown }> = []
+  if (periodIds.length > 0) {
+    const lookbackStart = shiftISODate(minDate, -CADENCE_LOOKBACK_DAYS)
+    const idPlaceholders = periodIds.map(() => '?').join(',')
+    completedRows = (await db
       .prepare(
-        `SELECT id, category, created_at, cadence_weekday, cadence_month_day
-         FROM tasks
-         WHERE is_master = 1`,
+        `SELECT task_id, date FROM day_entries
+         WHERE completed = 1 AND task_id IN (${idPlaceholders})
+           AND date >= ? AND date < ?`,
       )
-      .all() as Promise<MasterTaskRow[]>,
-    db
-      .prepare(
-        `SELECT task_id, date, completed, hours, timer_started_at
-         FROM day_entries
-         WHERE date >= ? AND date <= ?`,
-      )
-      .all(lookbackStart, maxDate) as Promise<DayEntryLite[]>,
-  ])
+      .all(...periodIds, lookbackStart, maxDate)) as Array<{
+      task_id: string
+      date: unknown
+    }>
+  }
 
   const entryByKey = new Map<string, DayEntryLite>()
   const completedByTask = new Map<string, Set<string>>()
@@ -251,13 +278,12 @@ export async function computeDaysProgress(dates: string[]): Promise<DayProgress[
       completedByTask.set(taskId, set)
     }
   }
-
-  const tasks = taskRows.map((row) => ({
-    ...row,
-    id: String(row.id),
-    category: String(row.category),
-    created_at: String(row.created_at ?? ''),
-  }))
+  for (const row of completedRows) {
+    const taskId = String(row.task_id)
+    const set = completedByTask.get(taskId) ?? new Set<string>()
+    set.add(isoDateKey(row.date))
+    completedByTask.set(taskId, set)
+  }
 
   return dates.map((date) =>
     progressForDate(date, tasks, entryByKey, completedByTask, today),
@@ -307,23 +333,24 @@ export type WeekProgress = {
 }
 
 /** Mon–Sun week around anchorDate, plus previous-week summary for delta. */
-export async function buildWeekProgress(anchorDate: string): Promise<WeekProgress> {
+export async function loadWeekBundle(anchorDate: string): Promise<{
+  week: WeekProgress
+  day: DayProgress
+}> {
   const today = todayISO()
   const weekStart = startOfIsoWeek(anchorDate)
   const weekEnd = shiftISODate(weekStart, 6)
   const prevStart = shiftISODate(weekStart, -7)
   const currentDates = Array.from({ length: 7 }, (_, j) => shiftISODate(weekStart, j))
   const prevDates = Array.from({ length: 7 }, (_, j) => shiftISODate(prevStart, j))
-
-  const [progress, goalRows] = await Promise.all([
-    computeDaysProgress([...currentDates, ...prevDates]),
-    db
-      .prepare(
-        `SELECT date, goal FROM daily_goals
-         WHERE date >= ? AND date <= ?`,
-      )
-      .all(weekStart, weekEnd) as Promise<Array<{ date: string; goal: string }>>,
-  ])
+  const allDates = [...currentDates, ...prevDates]
+  const progress = await computeDaysProgress(allDates)
+  const goalRows = (await db
+    .prepare(
+      `SELECT date, goal FROM daily_goals
+       WHERE date >= ? AND date <= ?`,
+    )
+    .all(weekStart, weekEnd)) as Array<{ date: string; goal: string }>
   const currentProgress = progress.slice(0, 7)
   const prevDays = progress.slice(7)
   const goalsByDate = new Map(
@@ -369,22 +396,30 @@ export async function buildWeekProgress(anchorDate: string): Promise<WeekProgres
   }
 
   const previous = aggregateDays(prevDays)
-
+  const dayIndex = allDates.indexOf(anchorDate)
   return {
-    weekStart,
-    weekEnd,
-    days,
-    summary: {
-      ...summaryAgg,
-      activeDays,
-      bestDate,
+    week: {
+      weekStart,
+      weekEnd,
+      days,
+      summary: {
+        ...summaryAgg,
+        activeDays,
+        bestDate,
+      },
+      previous: {
+        completed: previous.completed,
+        total: previous.total,
+        percent: previous.percent,
+      },
     },
-    previous: {
-      completed: previous.completed,
-      total: previous.total,
-      percent: previous.percent,
-    },
+    day: dayIndex >= 0 ? progress[dayIndex] : progress[0],
   }
+}
+
+export async function buildWeekProgress(anchorDate: string): Promise<WeekProgress> {
+  const { week } = await loadWeekBundle(anchorDate)
+  return week
 }
 
 export async function buildProgressSeries(

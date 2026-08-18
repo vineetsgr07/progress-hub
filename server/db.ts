@@ -83,17 +83,17 @@ function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
   return next
 }
 
-export const POSTGRES_QUERY_TIMEOUT_MS = 8_000
+export const POSTGRES_QUERY_TIMEOUT_MS = 3_000
 
 export function postgresPoolOptions(databaseUrl: string) {
   return {
-    max: 8,
+    max: 1,
     prepare: false as const,
     fetch_types: false as const,
     ssl: (databaseUrl.includes('localhost') ? false : 'require') as false | 'require',
     idle_timeout: 8,
     max_lifetime: 60,
-    connect_timeout: 5,
+    connect_timeout: 3,
     onnotice: () => {},
   }
 }
