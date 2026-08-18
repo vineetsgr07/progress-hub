@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict'
-import { otpSendErrorMessage, parseEmailOtpInput } from './auth-otp.ts'
+import {
+  OTP_COOLDOWN_MS,
+  OTP_RATE_LOCK_MS,
+  markOtpRateLimited,
+  markOtpSent,
+  otpSendErrorMessage,
+  parseEmailOtpInput,
+  readOtpSendGate,
+} from './auth-otp.ts'
 import { authCopy } from './auth-copy.ts'
 
 assert.deepEqual(parseEmailOtpInput('123456'), { kind: 'token', token: '123456' })
@@ -46,5 +54,28 @@ assert.equal(
   authCopy.otpWait,
 )
 assert.equal(otpSendErrorMessage({ message: 'nope' }, authCopy), authCopy.otpError)
+
+class Memory {
+  store = new Map<string, string>()
+  getItem(key: string) {
+    return this.store.get(key) ?? null
+  }
+  setItem(key: string, value: string) {
+    this.store.set(key, value)
+  }
+}
+
+const mem = new Memory()
+const t0 = 1_000_000
+assert.equal(readOtpSendGate(t0, mem).canSend, true)
+markOtpSent('owner@example.com', t0, mem)
+assert.equal(readOtpSendGate(t0 + 1, mem).canSend, false)
+assert.equal(readOtpSendGate(t0 + OTP_COOLDOWN_MS, mem).canSend, true)
+assert.equal(readOtpSendGate(t0 + 1, mem).email, 'owner@example.com')
+markOtpRateLimited(t0, mem)
+const locked = readOtpSendGate(t0 + OTP_COOLDOWN_MS + 1, mem)
+assert.equal(locked.canSend, false)
+assert.equal(locked.locked, true)
+assert.equal(readOtpSendGate(t0 + OTP_RATE_LOCK_MS, mem).canSend, true)
 
 console.log('auth-otp tests passed')
