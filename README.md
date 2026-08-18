@@ -27,9 +27,9 @@ Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: tr
 ## Features
 
 - **Full-screen workspace** — sticky header, date navigation, category filters
-- **Now** — default landing. Only pinned checklist items and reminders due today (plus overdue incomplete reminders). No week rail, filters, or stats on this page.
+- **Now** — default landing, centered reading column. Daily habits, pinned checklist items, and reminders due today (plus overdue incomplete reminders). Completed habits tuck under Show all. No week rail, filters, or stats on this page. On a phone, pin and timer wrap under the title.
 - **Today / Master** — complete tasks, live timers, hours, day goal
-- **Pin to Now** — pin icon beside the checklist timer; pinned items stay until you unpin. Completing hides them from Now for that day.
+- **Pin to Now** — pin icon beside the checklist timer; pinned items stay until you unpin. Completing hides them from Now for that day. Drag to reorder on Now; that order is separate from the parent task’s checklist.
 - **Reminders** — title + optional time, added on Now. No phone notifications in this version.
 - **Focus Mode** — Play on Today opens a bare session view (title, checklist item, Until break countdown, Time worked); Leave keeps the timer, Stop ends it; gentle beep/notification when the countdown hits zero
 - **Checklist focus timers** — start/stop the timer on a checklist item; time locks to that item; parent task shows the sum; HOURS LOGGED shows a session strip (hover for task + checklist)
@@ -49,7 +49,7 @@ Data is stored locally in PGlite (`data/pglite`) during `npm run dev`, or in the
 
 This app uses a **new** Supabase project (`progressive-hub`), not Actofy auth.
 
-1. In the new project SQL editor, run [`supabase/migrations/20260817120000_init_tracker.sql`](supabase/migrations/20260817120000_init_tracker.sql), then [`supabase/migrations/20260818010000_now_pins_reminders.sql`](supabase/migrations/20260818010000_now_pins_reminders.sql) (pins + reminders). Existing projects only need the second file.
+1. In the new project SQL editor, run [`supabase/migrations/20260817120000_init_tracker.sql`](supabase/migrations/20260817120000_init_tracker.sql), then [`supabase/migrations/20260818010000_now_pins_reminders.sql`](supabase/migrations/20260818010000_now_pins_reminders.sql) (pins + reminders), then [`supabase/migrations/20260818020000_now_pin_sort.sql`](supabase/migrations/20260818020000_now_pin_sort.sql) (Now drag order). Existing projects need the later files they have not already run.
 2. Authentication → Providers → Google: paste the new Google OAuth client ID and secret.
 3. Authentication → Providers → **Email**: enable. Turn on email OTP / magic-link codes (6-digit). The home-screen app signs in this way so iOS never leaves for Safari.
 4. Add authorized redirect URI in Google Cloud: `https://your-project-ref.supabase.co/auth/v1/callback`.
@@ -99,7 +99,8 @@ Opens:
 - `PATCH /api/tasks/:id/subtasks/reorder` — checklist drag order
 - `POST /api/tasks/:id/subtasks`
 - `PATCH/DELETE /api/subtasks/:id` — checklist title/done/pin
-- `GET /api/now?date=` — pinned open checklist items + reminders due that day (and overdue)
+- `GET /api/now?date=` — today’s habits, pinned open checklist items, and reminders due that day (and overdue)
+- `PATCH /api/now/items/reorder` — Now pinned-item drag order (`pin_sort`; does not change checklist `position`)
 - `GET/POST /api/reminders` · `PATCH/DELETE /api/reminders/:id`
 - `GET /api/board` — columns + tasks (ordered by `board_sort`)
 - `POST /api/board/columns` — optional `role`

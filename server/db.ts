@@ -391,6 +391,22 @@ export async function migrate() {
       `ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS pinned INTEGER NOT NULL DEFAULT 0`,
     )
   }
+  if (!(await hasColumn('subtasks', 'pin_sort'))) {
+    await db.exec(
+      `ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS pin_sort INTEGER NOT NULL DEFAULT 0`,
+    )
+    const pinned = (await db
+      .prepare(
+        `SELECT id FROM subtasks WHERE pinned = 1 ORDER BY created_at ASC, id ASC`,
+      )
+      .all()) as Array<{ id: string }>
+    const updatePinSort = await db.prepare(
+      `UPDATE subtasks SET pin_sort = ? WHERE id = ?`,
+    )
+    for (const [index, row] of pinned.entries()) {
+      await updatePinSort.run(index, row.id)
+    }
+  }
   if (!(await publicTableExists('reminders'))) {
     await db.exec(`
       CREATE TABLE IF NOT EXISTS reminders (

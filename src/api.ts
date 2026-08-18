@@ -229,6 +229,13 @@ export const api = {
     return request<NowPage>(`/api/now?date=${encodeURIComponent(date)}`)
   },
 
+  reorderNowItems(orderedIds: string[]) {
+    return request<{ ok: boolean; count: number }>('/api/now/items/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
+    })
+  },
+
   createReminder(input: {
     title: string
     dueDate?: string

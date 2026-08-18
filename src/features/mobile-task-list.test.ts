@@ -59,6 +59,26 @@ assert.match(
   'tablet task rows hide the drag-handle column',
 )
 assert.match(
+  css,
+  /\.now-item\.is-sortable\s*\{[^}]*grid-template-columns:\s*18px 18px minmax/,
+  'desktop Now tasks keep a grip column',
+)
+assert.match(
+  tablet,
+  /\.now-item\.is-sortable\s*\{[^}]*grid-template-columns:\s*18px minmax/,
+  'tablet Now tasks drop the grip column',
+)
+assert.match(
+  css,
+  /\.now-view\s*\{[^}]*margin-inline:\s*auto/,
+  'Now column is centered in the hub track',
+)
+assert.match(
+  css,
+  /\.now-item\.is-sortable\s*\{[^}]*touch-action:\s*pan-y/,
+  'Now task rows allow vertical scroll before a touch drag',
+)
+assert.match(
   phone,
   /\.task-row\s*>\s*\.list-drag-handle\s*\{[^}]*display:\s*none/,
   'phone task rows hide the drag-handle column',
@@ -233,6 +253,19 @@ assert.match(
   coarse,
   /\.subtask-editor,\s*\n\s*\.habits-add-input\s*\{[^}]*font-size:\s*max\(16px,\s*1em\)\s*!important/,
   'compact checklist and habit inputs beat 12px !important on touch',
+)
+
+const phoneNow = mediaBlocks(520)[0]
+assert.ok(phoneNow, 'missing 520px Now / checklist wrap query')
+assert.match(
+  phoneNow,
+  /\.now-item:has\(\.now-item-actions\)/,
+  'phone Now rows with actions wrap pin and timer under the title',
+)
+assert.match(
+  phoneNow,
+  /\.now-reminder-add\s*\{[^}]*flex-direction:\s*column/,
+  'phone reminder composer stacks title, time, and add',
 )
 
 const viewport = html.match(/<meta name="viewport"[^>]*>/)?.[0] ?? ''

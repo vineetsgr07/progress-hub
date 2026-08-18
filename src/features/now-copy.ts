@@ -1,9 +1,16 @@
 export const nowCopy = {
   nav: 'Now',
   tasks: 'Tasks',
+  habits: 'Habits',
   reminders: 'Reminders',
   emptyTasks: 'Pin a checklist item from Today to work on it here.',
+  emptyHabits: 'Add habits on Today — they show up here each day.',
   emptyReminders: 'Nothing due today. Add a reminder.',
+  showAll: (n: number) =>
+    n === 1 ? 'Show all (1 done)' : `Show all (${n} done)`,
+  hideDone: 'Hide done',
+  showAllAria: 'Show completed habits',
+  hideDoneAria: 'Hide completed habits',
   addReminder: 'Add a reminder',
   addPlaceholder: '+ Add a reminder',
   timeAria: 'Reminder time',
@@ -20,4 +27,7 @@ export const nowCopy = {
   deleteReminder: 'Remove reminder',
   reminderFailed: 'Couldn’t save that reminder. Try again.',
   reminderDeleted: 'Reminder removed',
+  dragAria: (title: string) =>
+    `Drag to reorder ${title || 'checklist item'}`,
+  reorderFailed: 'Couldn’t save that order. Try again.',
 } as const

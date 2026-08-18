@@ -207,6 +207,7 @@ function mapSubtask(
         : Number(row.done) === 1,
     position: Number(row.position),
     pinned: Number(row.pinned) === 1,
+    pinSort: Number(row.pin_sort ?? 0),
     hours: opts?.hours ?? 0,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -283,11 +284,28 @@ async function mapTask(
   }
 }
 
+async function nextPinSort(excludeId?: string) {
+  const row = (
+    excludeId
+      ? await db
+          .prepare(
+            `SELECT COALESCE(MAX(pin_sort), -1) AS m FROM subtasks WHERE pinned = 1 AND id != ?`,
+          )
+          .get(excludeId)
+      : await db
+          .prepare(
+            `SELECT COALESCE(MAX(pin_sort), -1) AS m FROM subtasks WHERE pinned = 1`,
+          )
+          .get()
+  ) as { m: number }
+  return Number(row.m) + 1
+}
+
 async function loadNowPage(date: string) {
   const pinnedRows = (await db
     .prepare(
       `SELECT id, task_id FROM subtasks WHERE pinned = 1
-       ORDER BY position ASC, created_at ASC`,
+       ORDER BY pin_sort ASC, created_at ASC`,
     )
     .all()) as Array<{ id: string; task_id: string }>
 
@@ -324,10 +342,12 @@ async function loadNowPage(date: string) {
   const reminderRows = (await db
     .prepare(`SELECT * FROM reminders`)
     .all()) as Array<Record<string, unknown>>
+  const habitsPage = await loadHabits(date)
   return {
     date,
     items,
     reminders: pendingRemindersForDate(reminderRows.map(mapReminder), date),
+    habits: habitsPage.habits,
   }
 }
 
@@ -1006,13 +1026,17 @@ app.patch('/api/subtasks/:id', async (req, res) => {
         ? 1
         : 0
       : Number(row.pinned ?? 0)
+  let pinSort = Number(row.pin_sort ?? 0)
+  if (typeof req.body.pinned === 'boolean' && req.body.pinned && Number(row.pinned) !== 1) {
+    pinSort = await nextPinSort(String(req.params.id))
+  }
 
   if (useDayScope) {
     const done = req.body.done ? 1 : 0
     if (done) await stopRunningTimerForSubtask(String(row.task_id), String(req.params.id), date!)
     await db.prepare(`
-      UPDATE subtasks SET title = ?, position = ?, pinned = ?, updated_at = ? WHERE id = ?
-    `).run(title, position, pinned, now, req.params.id)
+      UPDATE subtasks SET title = ?, position = ?, pinned = ?, pin_sort = ?, updated_at = ? WHERE id = ?
+    `).run(title, position, pinned, pinSort, now, req.params.id)
     await db.prepare(`
       INSERT INTO subtask_day_state (subtask_id, date, done, updated_at)
       VALUES (?, ?, ?, ?)
@@ -1042,8 +1066,8 @@ app.patch('/api/subtasks/:id', async (req, res) => {
   }
 
   await db.prepare(`
-    UPDATE subtasks SET title = ?, done = ?, position = ?, pinned = ?, updated_at = ? WHERE id = ?
-  `).run(title, done, position, pinned, now, req.params.id)
+    UPDATE subtasks SET title = ?, done = ?, position = ?, pinned = ?, pin_sort = ?, updated_at = ? WHERE id = ?
+  `).run(title, done, position, pinned, pinSort, now, req.params.id)
   await db.prepare(`UPDATE tasks SET updated_at = ? WHERE id = ?`).run(now, row.task_id)
 
   const updated = await db.prepare('SELECT * FROM subtasks WHERE id = ?').get(req.params.id) as Record<
@@ -1092,6 +1116,40 @@ app.get('/api/now', async (req, res) => {
     return
   }
   res.json(await loadNowPage(date))
+})
+
+app.patch('/api/now/items/reorder', async (req, res) => {
+  const orderedIds = req.body.orderedIds as string[]
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    res.status(400).json({ error: 'orderedIds required' })
+    return
+  }
+  const unique = [...new Set(orderedIds.map(String))]
+  if (unique.length !== orderedIds.length) {
+    res.status(400).json({ error: 'orderedIds must be unique' })
+    return
+  }
+  const placeholders = unique.map(() => '?').join(',')
+  const rows = (await db
+    .prepare(
+      `SELECT id FROM subtasks WHERE id IN (${placeholders}) AND pinned = 1`,
+    )
+    .all(...unique)) as Array<{ id: string }>
+  if (rows.length !== unique.length) {
+    res.status(400).json({ error: 'Every id must be a pinned checklist item' })
+    return
+  }
+  const now = new Date().toISOString()
+  const update = await db.prepare(
+    `UPDATE subtasks SET pin_sort = ?, updated_at = ? WHERE id = ?`,
+  )
+  const tx = db.transaction(async () => {
+    for (const [index, id] of unique.entries()) {
+      await update.run(index, now, id)
+    }
+  })
+  await tx()
+  res.json({ ok: true, count: unique.length })
 })
 
 app.get('/api/reminders', async (req, res) => {
@@ -2335,8 +2393,8 @@ app.post('/api/import', async (req, res) => {
       }
 
       const insertSub = await db.prepare(`
-        INSERT INTO subtasks (id, task_id, title, done, position, pinned, created_at, updated_at)
-        VALUES (@id, @task_id, @title, @done, @position, @pinned, @created_at, @updated_at)
+        INSERT INTO subtasks (id, task_id, title, done, position, pinned, pin_sort, created_at, updated_at)
+        VALUES (@id, @task_id, @title, @done, @position, @pinned, @pin_sort, @created_at, @updated_at)
       `)
       for (const s of subtasks as Record<string, unknown>[]) {
         await insertSub.run({
@@ -2346,6 +2404,7 @@ app.post('/api/import', async (req, res) => {
           done: Number(s.done ?? 0),
           position: Number(s.position ?? 0),
           pinned: Number(s.pinned) ? 1 : 0,
+          pin_sort: Number(s.pin_sort ?? s.pinSort ?? 0),
           created_at: String(s.created_at || new Date().toISOString()),
           updated_at: String(s.updated_at || new Date().toISOString()),
         })

@@ -1509,12 +1509,17 @@ try {
     })
     assert.equal(remFuture.status, 201)
 
+    const habitCreated = await req('POST', '/api/habits', { title: 'Water' })
+    assert.equal(habitCreated.status, 201)
+    const nowHabitId = (habitCreated.json as { id: string }).id
+
     const nowPage = await req('GET', `/api/now?date=${date}`)
     assert.equal(nowPage.status, 200)
     const nowBody = nowPage.json as {
       date: string
       items: Array<{ id: string; pinned: boolean; done: boolean; taskTitle: string }>
       reminders: Array<{ id: string; title: string }>
+      habits: Array<{ id: string; title: string; completed: boolean }>
     }
     assert.equal(nowBody.date, date)
     assert.equal(nowBody.items.length, 1)
@@ -1524,6 +1529,81 @@ try {
     assert.deepEqual(
       nowBody.reminders.map((r) => r.title),
       ['Overdue call', 'Today note'],
+    )
+    const water = nowBody.habits.find((h) => h.id === nowHabitId)
+    assert.ok(water)
+    assert.equal(water?.completed, false)
+
+    const habitDone = await req('PUT', `/api/habits/${nowHabitId}/entry`, {
+      date,
+      completed: true,
+    })
+    assert.equal(habitDone.status, 200)
+    const nowHabitsDone = await req('GET', `/api/now?date=${date}`)
+    const doneWater = (
+      nowHabitsDone.json as {
+        habits: Array<{ id: string; completed: boolean }>
+      }
+    ).habits.find((h) => h.id === nowHabitId)
+    assert.equal(doneWater?.completed, true)
+
+    const second = await req('POST', '/api/tasks', {
+      title: 'Now parent B',
+      category: 'Daily',
+      addToToday: true,
+      date,
+      subtasks: ['Second pin'],
+    })
+    assert.equal(second.status, 201)
+    const parentB = second.json as {
+      id: string
+      subtasks: Array<{ id: string; position: number }>
+    }
+    const pinB = await req('PATCH', `/api/subtasks/${parentB.subtasks[0].id}`, {
+      pinned: true,
+    })
+    assert.equal(pinB.status, 200)
+    assert.equal((pinB.json as { pinSort: number }).pinSort >= 1, true)
+
+    const nowBeforeReorder = await req('GET', `/api/now?date=${date}`)
+    assert.deepEqual(
+      (nowBeforeReorder.json as { items: Array<{ id: string }> }).items.map(
+        (item) => item.id,
+      ),
+      [parent.subtasks[0].id, parentB.subtasks[0].id],
+    )
+
+    const badReorder = await req('PATCH', '/api/now/items/reorder', {
+      orderedIds: [],
+    })
+    assert.equal(badReorder.status, 400)
+
+    const reorder = await req('PATCH', '/api/now/items/reorder', {
+      orderedIds: [parentB.subtasks[0].id, parent.subtasks[0].id],
+    })
+    assert.equal(reorder.status, 200)
+
+    const nowAfterReorder = await req('GET', `/api/now?date=${date}`)
+    const afterReorder = nowAfterReorder.json as {
+      items: Array<{
+        id: string
+        task: { subtasks: Array<{ id: string; position: number }> }
+      }>
+    }
+    assert.deepEqual(
+      afterReorder.items.map((item) => item.id),
+      [parentB.subtasks[0].id, parent.subtasks[0].id],
+    )
+    const parentChecklist = afterReorder.items.find(
+      (item) => item.id === parent.subtasks[0].id,
+    )?.task.subtasks
+    assert.equal(
+      parentChecklist?.find((s) => s.id === parent.subtasks[0].id)?.position,
+      0,
+    )
+    assert.equal(
+      parentChecklist?.find((s) => s.id === parent.subtasks[1].id)?.position,
+      1,
     )
 
     const donePin = await req('PATCH', `/api/subtasks/${parent.subtasks[0].id}`, {

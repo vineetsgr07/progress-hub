@@ -42,6 +42,8 @@ export type Subtask = {
   done: boolean
   position: number
   pinned: boolean
+  /** Now-page order among pinned items. Independent of checklist `position`. */
+  pinSort: number
   /** Hours attributed to this checklist item for the loaded date. */
   hours: number
   createdAt: string
@@ -104,6 +106,7 @@ export type NowPage = {
   date: string
   items: PinnedChecklistItem[]
   reminders: Reminder[]
+  habits: Habit[]
 }
 
 export type Board = {

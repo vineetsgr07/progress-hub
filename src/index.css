@@ -7337,7 +7337,9 @@ button.task-title-open:hover .subtask-chip-add {
   display: flex;
   flex-direction: column;
   gap: 28px;
-  max-width: 640px;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
   padding: 8px 0 32px;
 }
 
@@ -7382,6 +7384,21 @@ button.task-title-open:hover .subtask-chip-add {
   align-items: start;
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
+}
+
+.now-item.is-sortable {
+  grid-template-columns: 18px 18px minmax(0, 1fr) auto;
+  touch-action: pan-y;
+}
+
+.now-item.is-sortable:hover .subtask-drag-handle,
+.now-item.is-sortable:focus-within .subtask-drag-handle {
+  opacity: 1;
+}
+
+.now-item.is-dragging {
+  background: var(--track);
+  border-radius: 6px;
 }
 
 .now-item-body {
@@ -7582,6 +7599,10 @@ button.task-title-open:hover .subtask-chip-add {
 
   .task-row > .list-drag-handle {
     display: none;
+  }
+
+  .now-item.is-sortable {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
   }
 
   .task-meta-project {
@@ -7945,6 +7966,12 @@ button.task-title-open:hover .subtask-chip-add {
 
   .hub-body {
     padding: 10px 10px max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .now-view {
+    max-width: 100%;
+    gap: 22px;
+    padding: 4px 2px 20px;
   }
 
   .notes-drawer.is-narrow .notes-drawer-header {
@@ -9873,6 +9900,61 @@ select.badge.status {
   .focus-checklist-actions {
     justify-content: flex-end;
     padding-top: 2px;
+  }
+
+  .now-item:has(.now-item-actions),
+  .now-item.is-sortable {
+    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-areas:
+      "check title"
+      ". actions";
+    align-items: start;
+    padding: 12px 0;
+    min-height: 44px;
+  }
+
+  .now-item:has(.now-item-actions) .mantine-Checkbox-root,
+  .now-item.is-sortable .mantine-Checkbox-root {
+    grid-area: check;
+    position: relative;
+  }
+
+  .now-item:has(.now-item-actions) .mantine-Checkbox-root::after,
+  .now-item.is-sortable .mantine-Checkbox-root::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
+  }
+
+  .now-item:has(.now-item-actions) .now-item-body,
+  .now-item.is-sortable .now-item-body {
+    grid-area: title;
+  }
+
+  .now-item-actions {
+    grid-area: actions;
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
+
+  .now-reminder-add {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .now-reminder-add .mantine-TextInput-root {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .now-reminder-add .mantine-TextInput-input {
+    min-height: 44px;
+  }
+
+  .now-reminder-time,
+  .now-reminder-add .mantine-Button-root {
+    min-height: 44px;
+    width: 100%;
   }
 }
 

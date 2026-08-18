@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS subtasks (
   done INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0,
   pinned INTEGER NOT NULL DEFAULT 0,
+  pin_sort INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -145,5 +146,6 @@ CREATE INDEX IF NOT EXISTS idx_habit_entries_date ON habit_entries(date);
 CREATE INDEX IF NOT EXISTS idx_habits_sort ON habits(sort_order);
 CREATE INDEX IF NOT EXISTS idx_mindmaps_sort ON mindmaps(sort_order);
 CREATE INDEX IF NOT EXISTS idx_subtasks_pinned ON subtasks(pinned);
+CREATE INDEX IF NOT EXISTS idx_subtasks_pin_sort ON subtasks(pinned, pin_sort);
 CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_date);
 `
