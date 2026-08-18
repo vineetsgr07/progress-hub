@@ -87,6 +87,27 @@
   color-scheme: light;
 }
 
+/* iOS Safari zooms the page when a focused field is under 16px. */
+@media (pointer: coarse) {
+  html {
+    touch-action: manipulation;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):not([type='reset']):not([type='hidden']):not([type='file']):not([type='image']):not([type='color']),
+  textarea,
+  select,
+  [contenteditable='true'] {
+    font-size: max(16px, 1em);
+  }
+
+  .mantine-Input-input,
+  .tag-select-input,
+  .subtask-editor,
+  .habits-add-input {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 :root[data-mantine-color-scheme='dark'] {
   /* Soft night wall — not pure black */
   --bg: #111114;
@@ -3067,11 +3088,41 @@ button {
 
 .notes-view-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
   flex-shrink: 0;
+}
+
+.notes-view-search {
+  flex: 1;
+  min-width: 160px;
+}
+
+.notes-view-arrange-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notes-view-arrange-toggle:hover {
+  color: var(--ink);
+}
+
+.notes-view-arrange-toggle:focus-visible {
+  outline: 2px solid var(--accent-blue, var(--blue));
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .notes-view-title {
@@ -3168,8 +3219,8 @@ button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  padding: 6px 44px 6px 10px;
+  gap: 4px 12px;
+  padding: 8px 44px 8px 10px;
   border-radius: 8px;
 }
 
@@ -3194,8 +3245,16 @@ button {
   -webkit-box-orient: unset;
   overflow: hidden;
   line-height: 1.3;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.notes-view-card.is-row .notes-card-excerpt {
+  flex: 1 1 12rem;
+  margin: 0;
+  min-height: 0;
+  -webkit-line-clamp: 1;
+  font-size: 12px;
 }
 
 .notes-view-card.is-row .notes-card-badge {
@@ -5201,6 +5260,17 @@ button.task-title-open.is-selected,
   height: 24px;
 }
 
+.time-control.is-idle-icon {
+  height: 24px;
+  border: 0;
+  background: transparent;
+}
+
+.time-control.is-idle-icon .time-control-toggle {
+  width: 24px;
+  border-right: 0;
+}
+
 .time-control.is-compact .time-control-toggle {
   width: 24px;
 }
@@ -6843,13 +6913,53 @@ button.task-title-open:hover .subtask-chip-add {
 
 .subtask-list li {
   display: grid;
-  grid-template-columns: 18px 18px 1fr auto auto;
+  grid-template-columns: 18px 18px minmax(0, 1fr) auto;
   gap: 4px;
   align-items: center;
   padding: 4px 0;
   min-height: 28px;
   touch-action: pan-y;
   cursor: grab;
+}
+
+.subtask-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.subtask-pin,
+.focus-checklist-pin {
+  color: var(--muted);
+}
+
+.subtask-pin.is-pinned,
+.focus-checklist-pin.is-pinned {
+  color: var(--ink);
+}
+
+.focus-checklist-pin {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.focus-checklist-pin:hover:not(:disabled) {
+  background: var(--soft-surface);
+}
+
+.focus-checklist-pin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .subtask-list li.editing {
@@ -7221,6 +7331,119 @@ button.task-title-open:hover .subtask-chip-add {
   background: var(--chip-slate-bg);
   position: sticky;
   top: 0;
+}
+
+.now-view {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 640px;
+  padding: 8px 0 32px;
+}
+
+.now-section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.now-empty {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.now-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.now-error p {
+  margin: 0;
+  color: var(--ink);
+}
+
+.now-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.now-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.now-item-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.now-item-title {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.now-item-title-html {
+  overflow-wrap: anywhere;
+}
+
+.now-item-parent {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.now-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.now-item.is-done .now-item-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.now-reminder-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.now-reminder-add .mantine-TextInput-root {
+  flex: 1 1 160px;
+}
+
+.now-reminder-time {
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
 }
 
 .empty {
@@ -7688,7 +7911,7 @@ button.task-title-open:hover .subtask-chip-add {
   }
 
   .subtask-list li {
-    grid-template-columns: 18px minmax(0, 1fr) auto auto;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
     min-height: 28px;
   }
 
@@ -7970,6 +8193,13 @@ button.task-title-open:hover .subtask-chip-add {
 .notes-drawer-header-main {
   min-width: 0;
   flex: 1;
+}
+
+.notes-drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .notes-drawer-title-input input {
@@ -9610,6 +9840,40 @@ select.badge.status {
   .focus-mode-duration {
     justify-self: end;
   }
+
+  .focus-checklist-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-areas:
+      "check title"
+      ". actions";
+  }
+
+  .subtask-list li {
+    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-areas:
+      "check title"
+      ". actions";
+    align-items: start;
+  }
+
+  .subtask-list li .mantine-Checkbox-root {
+    grid-area: check;
+  }
+
+  .subtask-list li .subtask-body {
+    grid-area: title;
+  }
+
+  .subtask-list li .subtask-actions {
+    grid-area: actions;
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
+
+  .focus-checklist-actions {
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
 }
 
 /* —— Task detail panel (half / full workspace) —— */
@@ -10042,9 +10306,10 @@ select.badge.status {
     border-left: 0;
   }
 
-  /* Narrow full: stack like Focus Mode mobile. */
+  /* Narrow full: stack like Focus Mode mobile. !important beats a
+     leftover desktop inline split if useMediaQuery lags. */
   .task-detail-panel.is-full .task-detail-stack {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) !important;
     grid-template-rows: minmax(40vh, 1fr) minmax(40vh, 1fr);
   }
 
@@ -10061,6 +10326,53 @@ select.badge.status {
   .task-detail-panel.is-full .task-detail-checklist {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    padding: 12px 16px;
+  }
+
+  /* Grip is already display:none via .subtask-drag-handle — drop that
+     column so the title is not trapped in the 20px checkbox track. */
+  .focus-checklist-row {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-template-areas: "check title actions";
+    align-items: start;
+    overflow: visible;
+  }
+
+  .focus-checklist-drag {
+    display: none;
+  }
+
+  .focus-checklist-check {
+    grid-area: check;
+    margin-top: 10px;
+  }
+
+  .focus-checklist-title-wrap {
+    grid-area: title;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .focus-checklist-title {
+    overflow-x: visible;
+  }
+
+  .focus-checklist-actions {
+    grid-area: actions;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .focus-checklist-timer-btn,
+  .focus-checklist-delete {
+    position: relative;
+  }
+
+  .focus-checklist-timer-btn::after,
+  .focus-checklist-delete::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
   }
 }
 

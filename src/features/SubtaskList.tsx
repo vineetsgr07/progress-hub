@@ -14,9 +14,10 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ActionIcon, Checkbox, TextInput } from '@mantine/core'
-import { IconGripVertical, IconPlus, IconX } from '@tabler/icons-react'
+import { IconGripVertical, IconPin, IconPinnedOff, IconPlus, IconX } from '@tabler/icons-react'
 import type { Subtask } from '../types'
 import { partitionChecklist, visibleChecklist } from './focus-checklist'
+import { nowCopy } from './now-copy'
 import { taskCopy } from './task-copy'
 import { TimeControl } from './TimeControl'
 import {
@@ -50,6 +51,7 @@ type Props = {
   onDelete: (id: string) => void
   onReorder: (orderedIds: string[]) => Promise<void>
   onToggleTimer?: (subtaskId: string, action: 'start' | 'stop') => void
+  onTogglePin?: (id: string, pinned: boolean) => void
 }
 
 export function SubtaskList({
@@ -66,6 +68,7 @@ export function SubtaskList({
   onDelete,
   onReorder,
   onToggleTimer,
+  onTogglePin,
 }: Props) {
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -161,6 +164,7 @@ export function SubtaskList({
                     tick,
                   )}
                   onToggleTimer={onToggleTimer}
+                  onTogglePin={onTogglePin}
                 />
               ))}
             </ul>
@@ -240,6 +244,7 @@ function SortableSubtaskRow({
   running,
   hours,
   onToggleTimer,
+  onTogglePin,
 }: {
   subtask: Subtask
   busy?: boolean
@@ -252,6 +257,7 @@ function SortableSubtaskRow({
   running?: boolean
   hours?: number
   onToggleTimer?: (subtaskId: string, action: 'start' | 'stop') => void
+  onTogglePin?: (id: string, pinned: boolean) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: s.id })
@@ -398,27 +404,48 @@ function SortableSubtaskRow({
           </button>
         )}
       </div>
-      {showTimers && onToggleTimer ? (
-        <TimeControl
-          compact
-          running={Boolean(running)}
-          hours={hours ?? 0}
-          busy={busy}
-          onToggleTimer={() =>
-            onToggleTimer(s.id, running ? 'stop' : 'start')
-          }
-        />
-      ) : null}
-      <ActionIcon
-        color="red"
-        variant="subtle"
-        size="sm"
-        data-no-dnd
-        aria-label={`Delete “${plain || 'checklist item'}”`}
-        onClick={() => onDelete(s.id)}
-      >
-        <IconX {...ICON} />
-      </ActionIcon>
+      <div className="subtask-actions">
+        {onTogglePin ? (
+          <ActionIcon
+            variant="subtle"
+            size="sm"
+            data-no-dnd
+            className={`subtask-pin${s.pinned ? ' is-pinned' : ''}`}
+            aria-label={s.pinned ? nowCopy.unpin : nowCopy.pin}
+            title={s.pinned ? nowCopy.unpin : nowCopy.pin}
+            disabled={busy}
+            onClick={() => onTogglePin(s.id, !s.pinned)}
+          >
+            {s.pinned ? (
+              <IconPinnedOff {...ICON} />
+            ) : (
+              <IconPin {...ICON} />
+            )}
+          </ActionIcon>
+        ) : null}
+        {showTimers && onToggleTimer ? (
+          <TimeControl
+            compact
+            idleIconOnly
+            running={Boolean(running)}
+            hours={hours ?? 0}
+            busy={busy}
+            onToggleTimer={() =>
+              onToggleTimer(s.id, running ? 'stop' : 'start')
+            }
+          />
+        ) : null}
+        <ActionIcon
+          color="red"
+          variant="subtle"
+          size="sm"
+          data-no-dnd
+          aria-label={`Delete “${plain || 'checklist item'}”`}
+          onClick={() => onDelete(s.id)}
+        >
+          <IconX {...ICON} />
+        </ActionIcon>
+      </div>
     </li>
   )
 }

@@ -386,6 +386,28 @@ export async function migrate() {
   if (!(await hasColumn('time_logs', 'subtask_id'))) {
     await db.exec(`ALTER TABLE time_logs ADD COLUMN IF NOT EXISTS subtask_id TEXT`)
   }
+  if (!(await hasColumn('subtasks', 'pinned'))) {
+    await db.exec(
+      `ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS pinned INTEGER NOT NULL DEFAULT 0`,
+    )
+  }
+  if (!(await publicTableExists('reminders'))) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        due_time TEXT,
+        done INTEGER NOT NULL DEFAULT 0,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
+    await db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_date)`,
+    )
+  }
 
   const renamedAt = new Date().toISOString()
   await db

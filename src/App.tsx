@@ -45,7 +45,9 @@ import {
   NARROW_MAX_WIDTH,
   readNotesDrawerWidth,
 } from './features/notes-copy'
-import type { NoteListItem, NotesSubject } from './features/notes-list'
+import { notesListCopy, type NotesSubject } from './features/notes-list'
+import { NowView } from './features/NowView'
+import { nowCopy } from './features/now-copy'
 import { frequencyFilterLabel, taskCopy } from './features/task-copy'
 import { historyCopy } from './features/history-copy'
 import { themeCopy } from './features/theme-copy'
@@ -95,9 +97,10 @@ const EMPTY_DRAFT: TaskDraft = {
 }
 
 const NAV_ITEMS: Array<{ value: ViewTab; label: string; primary?: boolean }> = [
+  { value: 'now', label: nowCopy.nav, primary: true },
   { value: 'today', label: taskCopy.navToday, primary: true },
+  { value: 'notes', label: taskCopy.navNotes, primary: true },
   { value: 'master', label: taskCopy.navMaster, primary: true },
-  { value: 'notes', label: taskCopy.navNotes },
   { value: 'maps', label: taskCopy.navMaps },
   { value: 'analytics', label: taskCopy.navAnalytics },
   { value: 'dates', label: taskCopy.navDates },
@@ -121,7 +124,7 @@ export default function App() {
     frequencies.length > 0
       ? (['All', ...frequencies] as Category[])
       : CATEGORIES_FALLBACK
-  const [tab, setTab] = useState<ViewTab>('today')
+  const [tab, setTab] = useState<ViewTab>('now')
   const [analyticsHabitDetail, setAnalyticsHabitDetail] = useState(false)
   const [date, setDate] = useState(localISODate())
   const [category, setCategory] = useState<Category>('All')
@@ -129,7 +132,6 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [habits, setHabits] = useState<Habit[] | null>(null)
   const [week, setWeek] = useState<WeekProgress | null>(null)
-  const [recentNotes, setRecentNotes] = useState<NoteListItem[] | null>(null)
   const [habitsProgress, setHabitsProgress] = useState<HabitsProgress | null>(
     null,
   )
@@ -252,12 +254,6 @@ export default function App() {
 
   function bumpNotesVersion() {
     setNotesVersion((v) => v + 1)
-    void api
-      .getNotes({ sort: 'updated', scope: 'recent' })
-      .then((res) => {
-        setRecentNotes(res.notes)
-      })
-      .catch(() => undefined)
   }
 
   const isToday = date === localISODate()
@@ -287,7 +283,6 @@ export default function App() {
         setStats(page.stats)
         if (page.habits) setHabits(page.habits.habits)
         if (page.week) setWeek(page.week)
-        if (page.notes) setRecentNotes(page.notes.notes)
       } else if (tab === 'analytics') {
         const page = await api.getAnalytics(date)
         setStats(page.stats)
@@ -445,6 +440,21 @@ export default function App() {
     )
   }
 
+  function togglePinFor(taskId: string, sid: string, pinned: boolean) {
+    setTasks((prev) => patchSubtaskLocal(prev, taskId, sid, { pinned }))
+    void run(
+      async () => {
+        const updated = await api.updateSubtask(sid, { pinned })
+        setTasks((prev) => mergeSubtask(prev, taskId, updated))
+      },
+      {
+        success: pinned ? nowCopy.pinnedToast : nowCopy.unpinnedToast,
+        refresh: false,
+        busy: false,
+      },
+    )
+  }
+
   function renameSubtaskFor(taskId: string, sid: string, title: string) {
     setTasks((prev) => patchSubtaskLocal(prev, taskId, sid, { title }))
     void run(
@@ -497,7 +507,7 @@ export default function App() {
 
   function startSubtaskTimerFor(taskId: string, sid: string) {
     void unlockFocusAudio()
-    void run(
+    return run(
       async () => {
         const updated = await api.patchDayEntry(taskId, {
           date,
@@ -848,6 +858,33 @@ export default function App() {
         >
           <div className="hub-track hub-body-inner">
           <ViewStage stageKey={tab}>
+          {tab === 'now' && (
+            <NowView
+              date={date}
+              tick={tick}
+              busy={busy}
+              onOpenTask={openTask}
+              onEnsureTask={(task) => {
+                setTasks((prev) =>
+                  prev.some((t) => t.id === task.id)
+                    ? mergeTask(prev, task)
+                    : [...prev, task],
+                )
+              }}
+              onToggleItem={(taskId, sid, doneVal) =>
+                toggleSubtaskFor(taskId, sid, doneVal)
+              }
+              onTogglePin={(taskId, sid, pinned) =>
+                togglePinFor(taskId, sid, pinned)
+              }
+              onToggleTimer={async (taskId, sid, action) => {
+                if (action === 'start') await startSubtaskTimerFor(taskId, sid)
+                else await stopTaskTimer(taskId)
+              }}
+              onError={setError}
+              onToast={flash}
+            />
+          )}
           {(tab === 'today' || tab === 'master') && (
             <div
               className={
@@ -977,7 +1014,6 @@ export default function App() {
                     onRefresh={refresh}
                     addToToday={tab !== 'master'}
                     notesOpen={projectsNotesOpen}
-                    notesCount={recentNotes?.length ?? 0}
                     onToggleNotes={toggleProjectsNotes}
                     showNotesToggle={tab === 'today'}
                   />
@@ -1059,14 +1095,6 @@ export default function App() {
                     onSelectDate={setDate}
                     onError={setError}
                   />
-                  <NotesPanel
-                    version={notesVersion}
-                    notes={recentNotes}
-                    busy={busy}
-                    onOpen={openNoteSubject}
-                    onChanged={bumpNotesVersion}
-                    onError={setError}
-                  />
                 </div>
               )}
               {tab === 'today' &&
@@ -1087,7 +1115,6 @@ export default function App() {
                     </div>
                     <NotesPanel
                       version={notesVersion}
-                      notes={recentNotes}
                       busy={busy}
                       onOpen={openNoteSubject}
                       onChanged={bumpNotesVersion}
@@ -1349,6 +1376,9 @@ export default function App() {
           onReorderSubtasks={(orderedIds) =>
             reorderSubtasksFor(notesSubject.id, orderedIds)
           }
+          onTogglePin={(sid, pinned) =>
+            togglePinFor(notesSubject.id, sid, pinned)
+          }
         />
       )}
 
@@ -1381,21 +1411,34 @@ export default function App() {
           }}
           onMetaChange={async (meta: DetailMetaPatch) => {
             const { id } = notesSubject
-            const updated = await api.updateNote(id, {
-              title: meta.title,
-              projectTag: meta.projectTag,
-              priority: meta.priority,
-            })
-            setNotesFocus({
-              id: updated.id,
-              source: 'note',
-              title: updated.title,
-              body: updated.body,
-              projectTag: updated.projectTag,
-              priority: updated.priority as Task['priority'],
-              pinned: updated.pinned,
-            })
-            bumpNotesVersion()
+            try {
+              const updated = await api.updateNote(id, {
+                title: meta.title,
+                projectTag: meta.projectTag,
+                priority: meta.priority,
+                pinned: meta.pinned,
+              })
+              setNotesFocus({
+                id: updated.id,
+                source: 'note',
+                title: updated.title,
+                body: updated.body,
+                projectTag: updated.projectTag,
+                priority: updated.priority as Task['priority'],
+                pinned: updated.pinned,
+              })
+              bumpNotesVersion()
+              if (meta.pinned !== undefined) {
+                flash(
+                  meta.pinned
+                    ? notesListCopy.pinnedToast
+                    : notesListCopy.unpinnedToast,
+                )
+              }
+            } catch {
+              setError('Notes didn’t save. Use Retry in the notes panel.')
+              throw new Error('notes-meta-failed')
+            }
           }}
         />
       )}

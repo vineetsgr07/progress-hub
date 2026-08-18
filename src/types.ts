@@ -11,6 +11,7 @@ export type Category =
 export type Priority = 'High' | 'Medium' | 'Low'
 
 export type ViewTab =
+  | 'now'
   | 'today'
   | 'dates'
   | 'analytics'
@@ -40,8 +41,20 @@ export type Subtask = {
   title: string
   done: boolean
   position: number
+  pinned: boolean
   /** Hours attributed to this checklist item for the loaded date. */
   hours: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type Reminder = {
+  id: string
+  title: string
+  dueDate: string
+  dueTime: string | null
+  done: boolean
+  position: number
   createdAt: string
   updatedAt: string
 }
@@ -78,6 +91,19 @@ export type Task = {
   subtasks: Subtask[]
   subtaskProgress: { done: number; total: number }
   entry: DayEntry | null
+}
+
+export type PinnedChecklistItem = Subtask & {
+  taskTitle: string
+  task: Task
+  timerStartedAt: string | null
+  timerSubtaskId: string | null
+}
+
+export type NowPage = {
+  date: string
+  items: PinnedChecklistItem[]
+  reminders: Reminder[]
 }
 
 export type Board = {
@@ -325,7 +351,6 @@ export type TodayPage = {
   stats: Stats
   habits?: HabitsResponse
   week?: WeekProgress
-  notes?: NotesListPayload
 }
 
 export type TodayPulse = {

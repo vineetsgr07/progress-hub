@@ -48,6 +48,12 @@ import {
   parseMindmapDocument,
   stringifyMindmapDocument,
 } from './mindmap-document.js'
+import {
+  isIsoDate,
+  mapReminder,
+  parseDueTime,
+  pendingRemindersForDate,
+} from './reminders.js'
 
 export async function createApp() {
   await migrate()
@@ -200,6 +206,7 @@ function mapSubtask(
         ? opts.doneOverride
         : Number(row.done) === 1,
     position: Number(row.position),
+    pinned: Number(row.pinned) === 1,
     hours: opts?.hours ?? 0,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -273,6 +280,54 @@ async function mapTask(
           notes: entry.notes,
         }
       : null,
+  }
+}
+
+async function loadNowPage(date: string) {
+  const pinnedRows = (await db
+    .prepare(
+      `SELECT id, task_id FROM subtasks WHERE pinned = 1
+       ORDER BY position ASC, created_at ASC`,
+    )
+    .all()) as Array<{ id: string; task_id: string }>
+
+  const taskIds = [...new Set(pinnedRows.map((row) => String(row.task_id)))]
+  const tasksById = new Map<string, Awaited<ReturnType<typeof mapTask>>>()
+  for (const taskId of taskIds) {
+    const row = (await db
+      .prepare('SELECT * FROM tasks WHERE id = ?')
+      .get(taskId)) as Record<string, unknown> | undefined
+    if (!row) continue
+    const entry = (await db
+      .prepare(`SELECT * FROM day_entries WHERE task_id = ? AND date = ?`)
+      .get(taskId, date)) as Record<string, unknown> | undefined
+    tasksById.set(taskId, await mapTask(row, entry ?? null, date))
+  }
+
+  const items = []
+  for (const pin of pinnedRows) {
+    const task = tasksById.get(String(pin.task_id))
+    if (!task) continue
+    const sub = task.subtasks.find((s) => s.id === pin.id)
+    if (!sub || !sub.pinned || sub.done) continue
+    items.push({
+      ...sub,
+      taskTitle: String(task.title),
+      task,
+      timerStartedAt: task.entry?.timerStartedAt
+        ? String(task.entry.timerStartedAt)
+        : null,
+      timerSubtaskId: task.entry?.timerSubtaskId ?? null,
+    })
+  }
+
+  const reminderRows = (await db
+    .prepare(`SELECT * FROM reminders`)
+    .all()) as Array<Record<string, unknown>>
+  return {
+    date,
+    items,
+    reminders: pendingRemindersForDate(reminderRows.map(mapReminder), date),
   }
 }
 
@@ -945,12 +1000,19 @@ app.patch('/api/subtasks/:id', async (req, res) => {
         : null
   const useDayScope = isDaily && Boolean(date) && typeof req.body.done === 'boolean'
 
+  const pinned =
+    typeof req.body.pinned === 'boolean'
+      ? req.body.pinned
+        ? 1
+        : 0
+      : Number(row.pinned ?? 0)
+
   if (useDayScope) {
     const done = req.body.done ? 1 : 0
     if (done) await stopRunningTimerForSubtask(String(row.task_id), String(req.params.id), date!)
     await db.prepare(`
-      UPDATE subtasks SET title = ?, position = ?, updated_at = ? WHERE id = ?
-    `).run(title, position, now, req.params.id)
+      UPDATE subtasks SET title = ?, position = ?, pinned = ?, updated_at = ? WHERE id = ?
+    `).run(title, position, pinned, now, req.params.id)
     await db.prepare(`
       INSERT INTO subtask_day_state (subtask_id, date, done, updated_at)
       VALUES (?, ?, ?, ?)
@@ -980,8 +1042,8 @@ app.patch('/api/subtasks/:id', async (req, res) => {
   }
 
   await db.prepare(`
-    UPDATE subtasks SET title = ?, done = ?, position = ?, updated_at = ? WHERE id = ?
-  `).run(title, done, position, now, req.params.id)
+    UPDATE subtasks SET title = ?, done = ?, position = ?, pinned = ?, updated_at = ? WHERE id = ?
+  `).run(title, done, position, pinned, now, req.params.id)
   await db.prepare(`UPDATE tasks SET updated_at = ? WHERE id = ?`).run(now, row.task_id)
 
   const updated = await db.prepare('SELECT * FROM subtasks WHERE id = ?').get(req.params.id) as Record<
@@ -1020,6 +1082,126 @@ app.delete('/api/subtasks/:id', async (req, res) => {
     new Date().toISOString(),
     row.task_id,
   )
+  res.status(204).end()
+})
+
+app.get('/api/now', async (req, res) => {
+  const date = String(req.query.date || todayISO())
+  if (!isIsoDate(date)) {
+    res.status(400).json({ error: 'date must be YYYY-MM-DD' })
+    return
+  }
+  res.json(await loadNowPage(date))
+})
+
+app.get('/api/reminders', async (req, res) => {
+  const date = String(req.query.date || todayISO())
+  const rows = (await db
+    .prepare(`SELECT * FROM reminders ORDER BY position ASC, created_at ASC`)
+    .all()) as Array<Record<string, unknown>>
+  const mapped = rows.map(mapReminder)
+  const reminders =
+    String(req.query.pending || '') === '1'
+      ? pendingRemindersForDate(mapped, date)
+      : mapped
+  res.json({ date, reminders })
+})
+
+app.post('/api/reminders', async (req, res) => {
+  const title = String(req.body.title ?? '').trim()
+  if (!title) {
+    res.status(400).json({ error: 'Title is required' })
+    return
+  }
+  const dueDate = String(req.body.dueDate ?? req.body.due_date ?? todayISO())
+  if (!isIsoDate(dueDate)) {
+    res.status(400).json({ error: 'dueDate must be YYYY-MM-DD' })
+    return
+  }
+  const sentTime = req.body.dueTime !== undefined ? req.body.dueTime : req.body.due_time
+  const dueTime = sentTime === undefined ? null : parseDueTime(sentTime)
+  if (sentTime !== undefined && dueTime === undefined) {
+    res.status(400).json({ error: 'dueTime must be HH:MM' })
+    return
+  }
+  const now = new Date().toISOString()
+  const max = (await db
+    .prepare(`SELECT COALESCE(MAX(position), -1) AS m FROM reminders`)
+    .get()) as { m: number }
+  const id = randomUUID()
+  await db
+    .prepare(
+      `INSERT INTO reminders (id, title, due_date, due_time, done, position, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+    )
+    .run(id, title, dueDate, dueTime, max.m + 1, now, now)
+  res.status(201).json(
+    mapReminder(
+      (await db.prepare('SELECT * FROM reminders WHERE id = ?').get(id)) as Record<
+        string,
+        unknown
+      >,
+    ),
+  )
+})
+
+app.patch('/api/reminders/:id', async (req, res) => {
+  const row = (await db
+    .prepare('SELECT * FROM reminders WHERE id = ?')
+    .get(req.params.id)) as Record<string, unknown> | undefined
+  if (!row) {
+    res.status(404).json({ error: 'Reminder not found' })
+    return
+  }
+  const title =
+    req.body.title !== undefined ? String(req.body.title).trim() : String(row.title)
+  if (!title) {
+    res.status(400).json({ error: 'Title is required' })
+    return
+  }
+  const dueDate =
+    req.body.dueDate !== undefined || req.body.due_date !== undefined
+      ? String(req.body.dueDate ?? req.body.due_date)
+      : String(row.due_date)
+  if (!isIsoDate(dueDate)) {
+    res.status(400).json({ error: 'dueDate must be YYYY-MM-DD' })
+    return
+  }
+  const sentTime = req.body.dueTime !== undefined ? req.body.dueTime : req.body.due_time
+  let dueTime =
+    row.due_time == null || row.due_time === '' ? null : String(row.due_time)
+  if (sentTime !== undefined) {
+    const parsed = parseDueTime(sentTime)
+    if (parsed === undefined) {
+      res.status(400).json({ error: 'dueTime must be HH:MM' })
+      return
+    }
+    dueTime = parsed
+  }
+  const done =
+    typeof req.body.done === 'boolean' ? (req.body.done ? 1 : 0) : Number(row.done)
+  const now = new Date().toISOString()
+  await db
+    .prepare(
+      `UPDATE reminders SET title = ?, due_date = ?, due_time = ?, done = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(title, dueDate, dueTime, done, now, req.params.id)
+  res.json(
+    mapReminder(
+      (await db
+        .prepare('SELECT * FROM reminders WHERE id = ?')
+        .get(req.params.id)) as Record<string, unknown>,
+    ),
+  )
+})
+
+app.delete('/api/reminders/:id', async (req, res) => {
+  const result = await db.prepare('DELETE FROM reminders WHERE id = ?').run(req.params.id)
+  if (result.changes === 0) {
+    res.status(404).json({ error: 'Reminder not found' })
+    return
+  }
   res.status(204).end()
 })
 
@@ -1569,6 +1751,8 @@ app.get('/api/notes', async (req, res) => {
       source: String(req.query.source || ''),
       sort: String(req.query.sort || ''),
       scope: String(req.query.scope || ''),
+      limit: String(req.query.limit || ''),
+      pinned: String(req.query.pinned || ''),
     }),
   )
 })
@@ -2036,6 +2220,9 @@ app.get('/api/export', async (_req, res) => {
     mindmaps: await db
       .prepare('SELECT * FROM mindmaps ORDER BY sort_order, created_at')
       .all(),
+    reminders: await db
+      .prepare('SELECT * FROM reminders ORDER BY position, created_at')
+      .all(),
   })
 })
 
@@ -2070,6 +2257,7 @@ app.post('/api/import', async (req, res) => {
       ? payload.habit_entries
       : []
   const mindmaps = Array.isArray(payload.mindmaps) ? payload.mindmaps : []
+  const reminders = Array.isArray(payload.reminders) ? payload.reminders : []
 
   try {
     const tx = db.transaction(async () => {
@@ -2077,6 +2265,7 @@ app.post('/api/import', async (req, res) => {
         DELETE FROM mindmaps;
         DELETE FROM habit_entries;
         DELETE FROM habits;
+        DELETE FROM reminders;
         DELETE FROM subtask_day_state;
         DELETE FROM time_logs;
         DELETE FROM day_entries;
@@ -2146,8 +2335,8 @@ app.post('/api/import', async (req, res) => {
       }
 
       const insertSub = await db.prepare(`
-        INSERT INTO subtasks (id, task_id, title, done, position, created_at, updated_at)
-        VALUES (@id, @task_id, @title, @done, @position, @created_at, @updated_at)
+        INSERT INTO subtasks (id, task_id, title, done, position, pinned, created_at, updated_at)
+        VALUES (@id, @task_id, @title, @done, @position, @pinned, @created_at, @updated_at)
       `)
       for (const s of subtasks as Record<string, unknown>[]) {
         await insertSub.run({
@@ -2156,6 +2345,7 @@ app.post('/api/import', async (req, res) => {
           title: String(s.title || ''),
           done: Number(s.done ?? 0),
           position: Number(s.position ?? 0),
+          pinned: Number(s.pinned) ? 1 : 0,
           created_at: String(s.created_at || new Date().toISOString()),
           updated_at: String(s.updated_at || new Date().toISOString()),
         })
@@ -2310,6 +2500,27 @@ app.post('/api/import', async (req, res) => {
           updated_at: String(m.updated_at || new Date().toISOString()),
         })
       }
+
+      const insertReminder = await db.prepare(`
+        INSERT INTO reminders
+          (id, title, due_date, due_time, done, position, created_at, updated_at)
+        VALUES (@id, @title, @due_date, @due_time, @done, @position, @created_at, @updated_at)
+      `)
+      for (const r of reminders as Record<string, unknown>[]) {
+        await insertReminder.run({
+          id: String(r.id),
+          title: String(r.title || ''),
+          due_date: String(r.due_date ?? r.dueDate ?? ''),
+          due_time:
+            r.due_time == null && r.dueTime == null
+              ? null
+              : String(r.due_time ?? r.dueTime),
+          done: Number(r.done) ? 1 : 0,
+          position: Number(r.position ?? 0),
+          created_at: String(r.created_at || new Date().toISOString()),
+          updated_at: String(r.updated_at || new Date().toISOString()),
+        })
+      }
     })
     await tx()
   } catch (err) {
@@ -2330,6 +2541,7 @@ app.post('/api/import', async (req, res) => {
       habits: habits.length,
       habitEntries: habitEntries.length,
       mindmaps: mindmaps.length,
+      reminders: reminders.length,
     },
   })
 })

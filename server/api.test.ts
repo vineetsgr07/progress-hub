@@ -807,8 +807,73 @@ try {
     assert.ok(olderBody.notes.some((n) => n.id === staleId))
     assert.ok(!olderBody.notes.some((n) => n.id === freshId))
 
+    await db
+      .prepare(`UPDATE standalone_notes SET pinned = 1 WHERE id = ?`)
+      .run(staleId)
+    const recentPinned = await req('GET', '/api/notes?source=note&scope=recent')
+    const recentPinnedBody = recentPinned.json as {
+      notes: Array<{ id: string; excerpt?: string; body?: string }>
+    }
+    assert.ok(recentPinnedBody.notes.some((n) => n.id === staleId))
+    assert.ok(recentPinnedBody.notes.every((n) => n.excerpt != null))
+    assert.ok(recentPinnedBody.notes.every((n) => n.body === undefined))
+
+    const pinnedOnly = await req('GET', '/api/notes?pinned=1')
+    assert.equal(pinnedOnly.status, 200)
+    const pinnedOnlyBody = pinnedOnly.json as {
+      notes: Array<{ id: string; source: string; pinned: boolean }>
+      olderCount: number
+    }
+    assert.equal(pinnedOnlyBody.olderCount, 0)
+    assert.ok(pinnedOnlyBody.notes.length > 0)
+    assert.ok(pinnedOnlyBody.notes.every((n) => n.pinned && n.source === 'note'))
+    assert.ok(pinnedOnlyBody.notes.some((n) => n.id === staleId))
+    assert.ok(!pinnedOnlyBody.notes.some((n) => n.id === freshId))
+
+    const hiddenStaleId = crypto.randomUUID()
+    await db.prepare(
+      `INSERT INTO standalone_notes
+        (id, title, body, project_tag, priority, pinned, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+    ).run(
+      hiddenStaleId,
+      'Zebra old unique',
+      '<p>hidden stale</p>',
+      'Personal',
+      'Medium',
+      oldIso,
+      oldIso,
+    )
+    const searchHidden = await req(
+      'GET',
+      '/api/notes?source=note&q=Zebra%20old%20unique',
+    )
+    const searchHiddenBody = searchHidden.json as { notes: Array<{ id: string }> }
+    assert.ok(!searchHiddenBody.notes.some((n) => n.id === hiddenStaleId))
+
+    const ids: string[] = []
+    for (let i = 0; i < 51; i++) {
+      const created = await req('POST', '/api/notes', {
+        title: `Limit note ${i}`,
+        body: `<p>cap ${i}</p>`,
+        projectTag: 'Personal',
+      })
+      assert.equal(created.status, 201)
+      ids.push((created.json as { id: string }).id)
+    }
+    const capped = await req('GET', '/api/notes?source=note&scope=recent')
+    assert.equal(capped.status, 200)
+    const cappedBody = capped.json as { notes: Array<{ id: string }> }
+    assert.equal(cappedBody.notes.length, 50)
+    const limited = await req('GET', '/api/notes?source=note&scope=recent&limit=2')
+    assert.equal((limited.json as { notes: unknown[] }).notes.length, 2)
+
     await req('DELETE', `/api/notes/${freshId}`)
     await req('DELETE', `/api/notes/${staleId}`)
+    await req('DELETE', `/api/notes/${hiddenStaleId}`)
+    for (const id of ids) {
+      await req('DELETE', `/api/notes/${id}`)
+    }
   }
 
   // ---- checklist focus timers: attribution + auto-stop + validation ----
@@ -1355,14 +1420,13 @@ try {
       stats: { date: string; today: { total: number } }
       habits: { habits: Array<{ title: string }> }
       week: { date: string; days: unknown[]; streak: number }
-      notes: { notes: Array<{ title: string }>; olderCount: number }
     }
     assert.equal(todayBody.date, date)
     assert.ok(Array.isArray(todayBody.tasks))
     assert.equal(todayBody.stats.date, date)
     assert.ok(todayBody.habits.habits.some((h) => h.title === 'Morning walk'))
     assert.equal(todayBody.week.days.length, 7)
-    assert.ok(todayBody.notes.notes.some((n) => n.title === 'Bootstrap note'))
+    assert.equal((today.json as { notes?: unknown }).notes, undefined)
 
     const master = await req('GET', `/api/today?date=${date}&master=1`)
     assert.equal(master.status, 200)
@@ -1380,7 +1444,7 @@ try {
     assert.equal(projects.status, 200)
     const projectsBody = projects.json as Record<string, unknown>
     assert.ok(projectsBody.stats)
-    assert.ok(projectsBody.notes)
+    assert.equal(projectsBody.notes, undefined)
     assert.equal(projectsBody.habits, undefined)
     assert.equal(projectsBody.week, undefined)
 
@@ -1403,6 +1467,82 @@ try {
     assert.ok(analyticsBody.stats.insight?.rangeStart)
     assert.equal(analyticsBody.habitsProgress.days, 28)
     assert.ok(Array.isArray(analyticsBody.habitsProgress.habits))
+  }
+
+  // ---- Now: pin checklist items + reminders due today ----
+  {
+    const created = await req('POST', '/api/tasks', {
+      title: 'Now parent',
+      category: 'Daily',
+      addToToday: true,
+      date,
+      subtasks: ['Pinned item', 'Leave unpinned'],
+    })
+    assert.equal(created.status, 201)
+    const parent = created.json as {
+      id: string
+      subtasks: Array<{ id: string; title: string; pinned: boolean }>
+    }
+    assert.equal(parent.subtasks.length, 2)
+    assert.equal(parent.subtasks[0].pinned, false)
+
+    const pin = await req('PATCH', `/api/subtasks/${parent.subtasks[0].id}`, {
+      pinned: true,
+    })
+    assert.equal(pin.status, 200)
+    assert.equal((pin.json as { pinned: boolean }).pinned, true)
+
+    const remOverdue = await req('POST', '/api/reminders', {
+      title: 'Overdue call',
+      dueDate: '2026-08-01',
+      dueTime: '09:00',
+    })
+    assert.equal(remOverdue.status, 201)
+    const remToday = await req('POST', '/api/reminders', {
+      title: 'Today note',
+      dueDate: date,
+    })
+    assert.equal(remToday.status, 201)
+    const remFuture = await req('POST', '/api/reminders', {
+      title: 'Later',
+      dueDate: '2026-12-01',
+    })
+    assert.equal(remFuture.status, 201)
+
+    const nowPage = await req('GET', `/api/now?date=${date}`)
+    assert.equal(nowPage.status, 200)
+    const nowBody = nowPage.json as {
+      date: string
+      items: Array<{ id: string; pinned: boolean; done: boolean; taskTitle: string }>
+      reminders: Array<{ id: string; title: string }>
+    }
+    assert.equal(nowBody.date, date)
+    assert.equal(nowBody.items.length, 1)
+    assert.equal(nowBody.items[0].id, parent.subtasks[0].id)
+    assert.equal(nowBody.items[0].taskTitle, 'Now parent')
+    assert.ok(!nowBody.items.some((item) => item.id === parent.subtasks[1].id))
+    assert.deepEqual(
+      nowBody.reminders.map((r) => r.title),
+      ['Overdue call', 'Today note'],
+    )
+
+    const donePin = await req('PATCH', `/api/subtasks/${parent.subtasks[0].id}`, {
+      done: true,
+      date,
+    })
+    assert.equal(donePin.status, 200)
+    const nowAfterDone = await req('GET', `/api/now?date=${date}`)
+    const afterDone = nowAfterDone.json as { items: Array<{ id: string }> }
+    assert.ok(!afterDone.items.some((item) => item.id === parent.subtasks[0].id))
+
+    const exported = await req('GET', '/api/export')
+    assert.equal(exported.status, 200)
+    const backup = exported.json as {
+      subtasks: Array<{ pinned?: number }>
+      reminders: Array<{ title: string }>
+    }
+    assert.ok(backup.subtasks.some((s) => Number(s.pinned) === 1))
+    assert.ok(backup.reminders.some((r) => r.title === 'Today note'))
   }
 
   console.log('api tests passed')

@@ -10,6 +10,8 @@ type Props = {
   /** Show duration only — no play/stop or manual edit. */
   readOnly?: boolean
   compact?: boolean
+  /** Play/stop icon only when idle with no hours — saves width on checklist rows. */
+  idleIconOnly?: boolean
   onToggleTimer?: () => void
   onHoursChange?: (hours: number) => void
 }
@@ -23,6 +25,7 @@ export function TimeControl({
   busy,
   readOnly,
   compact,
+  idleIconOnly,
   onToggleTimer,
   onHoursChange,
 }: Props) {
@@ -30,10 +33,11 @@ export function TimeControl({
   const showEdit = !readOnly && !running && onHoursChange
   // Clock style (m:ss / h:mm:ss) must not sit next to an "h" unit — that reads as hours.
   const showClock = running || readOnly || !showEdit
+  const iconOnly = Boolean(idleIconOnly && !running && hours <= 0 && showToggle)
 
   return (
     <div
-      className={`time-control${running ? ' is-running' : ''}${compact ? ' is-compact' : ''}${readOnly ? ' is-readonly' : ''}`}
+      className={`time-control${running ? ' is-running' : ''}${compact ? ' is-compact' : ''}${readOnly ? ' is-readonly' : ''}${iconOnly ? ' is-idle-icon' : ''}`}
       data-no-dnd
     >
       {showToggle ? (
@@ -52,6 +56,7 @@ export function TimeControl({
           )}
         </button>
       ) : null}
+      {iconOnly ? null : (
       <div className="time-control-value">
         {showClock ? (
           <span
@@ -86,6 +91,7 @@ export function TimeControl({
           </>
         )}
       </div>
+      )}
     </div>
   )
 }

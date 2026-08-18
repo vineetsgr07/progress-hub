@@ -129,6 +129,7 @@ type Props = {
   onStartSubtaskTimer: (subtaskId: string) => void
   onStopSubtaskTimer: () => void
   onReorderSubtasks: (orderedIds: string[]) => Promise<void>
+  onTogglePin?: (subtaskId: string, pinned: boolean) => void
 }
 
 function initEndAt(taskId: string, durationMin: number): number {
@@ -170,12 +171,17 @@ export function TaskDetailPanel({
   onStartSubtaskTimer,
   onStopSubtaskTimer,
   onReorderSubtasks,
+  onTogglePin,
 }: Props) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const stackRef = useRef<HTMLDivElement>(null)
   const resizeRef = useRef<HTMLButtonElement>(null)
-  const isNarrow = useMediaQuery(`(max-width: ${NARROW_MAX_WIDTH}px)`)
+  const isNarrow = useMediaQuery(
+    `(max-width: ${NARROW_MAX_WIDTH}px)`,
+    undefined,
+    { getInitialValueInEffect: false },
+  )
   const [size, setSize] = useState<TaskDetailSize>(() =>
     sessionActive ? 'full' : readTaskDetailSize(),
   )
@@ -1074,6 +1080,7 @@ export function TaskDetailPanel({
               onStartTimer={onStartSubtaskTimer}
               onStopTimer={onStopSubtaskTimer}
               onReorder={onReorderSubtasks}
+              onTogglePin={onTogglePin}
             />
           </section>
 

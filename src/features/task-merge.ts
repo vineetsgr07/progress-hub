@@ -122,7 +122,7 @@ export function patchSubtaskLocal(
   tasks: Task[],
   taskId: string,
   subtaskId: string,
-  patch: Partial<Pick<Subtask, 'done' | 'title'>>,
+  patch: Partial<Pick<Subtask, 'done' | 'title' | 'pinned'>>,
 ): Task[] {
   return tasks.map((t) => {
     if (t.id !== taskId) return t

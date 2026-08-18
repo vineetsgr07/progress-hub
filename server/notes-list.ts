@@ -128,14 +128,110 @@ export function parseNoteSource(raw: string | undefined): NoteSource | 'all' {
   return 'all'
 }
 
+export function parsePinnedOnly(raw: string | undefined): boolean {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase()
+  return value === '1' || value === 'true' || value === 'pinned'
+}
+
 /** recent = updated within window; older = stale; all = no recency filter. */
 export type NoteScope = 'recent' | 'older' | 'all'
 
 export const NOTES_RECENT_DAYS = 14
+export const NOTES_LIST_LIMIT = 50
+export const NOTES_LIST_LIMIT_MAX = 200
+export const NOTES_EXCERPT_SQL_CHARS = 4000
 
 export function parseNoteScope(raw: string | undefined): NoteScope {
-  if (raw === 'recent' || raw === 'older' || raw === 'all') return raw
-  return 'all'
+  if (raw === 'older' || raw === 'all') return raw
+  return 'recent'
+}
+
+export function parseNotesLimit(raw: string | number | undefined): number {
+  const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim())
+  if (!Number.isFinite(n) || n <= 0) return NOTES_LIST_LIMIT
+  return Math.min(Math.floor(n), NOTES_LIST_LIMIT_MAX)
+}
+
+export function notesListCutoffIso(now = Date.now()): string {
+  return new Date(notesRecentCutoff(now)).toISOString()
+}
+
+export function notesTaskWhere(opts: {
+  q: string
+  project: string
+  priority: string
+  scope: NoteScope
+  cutoffIso: string
+  excerptChars?: number
+}): { sql: string; params: unknown[] } {
+  const excerptChars = opts.excerptChars ?? NOTES_EXCERPT_SQL_CHARS
+  const clauses = [`TRIM(notes) != ''`]
+  const params: unknown[] = []
+  if (opts.project) {
+    clauses.push('project_tag = ?')
+    params.push(opts.project)
+  }
+  if (opts.priority) {
+    clauses.push('priority = ?')
+    params.push(opts.priority)
+  }
+  if (opts.q) {
+    const like = `%${opts.q}%`
+    clauses.push(
+      '(lower(title) LIKE ? OR lower(substr(notes, 1, ?)) LIKE ? OR lower(project_tag) LIKE ?)',
+    )
+    params.push(like, excerptChars, like, like)
+  }
+  if (opts.scope === 'recent') {
+    clauses.push('updated_at >= ?')
+    params.push(opts.cutoffIso)
+  } else if (opts.scope === 'older') {
+    clauses.push('updated_at < ?')
+    params.push(opts.cutoffIso)
+  }
+  return { sql: clauses.join(' AND '), params }
+}
+
+export function notesStandaloneWhere(opts: {
+  q: string
+  project: string
+  priority: string
+  scope: NoteScope
+  cutoffIso: string
+  excerptChars?: number
+  pinnedOnly?: boolean
+}): { sql: string; params: unknown[] } {
+  const excerptChars = opts.excerptChars ?? NOTES_EXCERPT_SQL_CHARS
+  const clauses: string[] = ['1=1']
+  const params: unknown[] = []
+  if (opts.project) {
+    clauses.push('project_tag = ?')
+    params.push(opts.project)
+  }
+  if (opts.priority) {
+    clauses.push('priority = ?')
+    params.push(opts.priority)
+  }
+  if (opts.q) {
+    const like = `%${opts.q}%`
+    clauses.push(
+      '(lower(title) LIKE ? OR lower(substr(body, 1, ?)) LIKE ? OR lower(project_tag) LIKE ?)',
+    )
+    params.push(like, excerptChars, like, like)
+  }
+  if (opts.pinnedOnly) {
+    clauses.push('pinned = 1')
+  }
+  if (opts.scope === 'recent') {
+    clauses.push('(updated_at >= ? OR pinned = 1)')
+    params.push(opts.cutoffIso)
+  } else if (opts.scope === 'older') {
+    clauses.push('updated_at < ? AND pinned = 0')
+    params.push(opts.cutoffIso)
+  }
+  return { sql: clauses.join(' AND '), params }
 }
 
 export function notesRecentCutoff(

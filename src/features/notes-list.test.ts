@@ -2,16 +2,25 @@ import assert from 'node:assert/strict'
 import {
   applyManualNoteOrder,
   buildNoteSections,
+  defaultNotesFilters,
   effectiveNoteSort,
   mergeNoteOrder,
   noteItemKey,
+  NOTES_FILTERS_KEY,
+  notesListCopy,
   parseNoteGroupBy,
   parseNoteLayout,
+  parseNotesFilters,
+  parseNoteSort,
+  parseNoteSourceFilter,
+  parsePinnedOnly,
+  readNotesFilters,
   readNotesGroupCollapsed,
   readNotesLayout,
   relativeUpdatedAt,
   sectionItemCount,
   sortClientNotes,
+  writeNotesFilters,
   writeNotesGroupCollapsed,
   writeNotesLayout,
   type NoteListItem,
@@ -167,5 +176,49 @@ assert.deepEqual(
   ['note:b', 'task:c', 'note:a'],
 )
 assert.equal(sortClientNotes(manualItems, 'manual', []).length, 3)
+assert.equal(notesListCopy.arrange, 'Arrange')
+assert.equal(
+  notesListCopy.emptyPinned,
+  'No pinned notes yet. Open a note and pin it to keep it here.',
+)
+assert.equal(notesListCopy.filterPinnedOnly, 'Pinned')
+assert.equal(parseNoteSourceFilter('note'), 'note')
+assert.equal(parseNoteSourceFilter('nope'), 'all')
+assert.equal(parseNoteSort('manual'), 'manual')
+assert.equal(parseNoteSort('nope'), 'updated')
+assert.equal(parsePinnedOnly(true), true)
+assert.equal(parsePinnedOnly('1'), true)
+assert.equal(parsePinnedOnly('yes'), false)
+
+assert.deepEqual(readNotesFilters(storage), defaultNotesFilters())
+writeNotesFilters(
+  {
+    project: 'Marketing',
+    priority: 'High',
+    source: 'note',
+    sort: 'manual',
+    groupBy: 'project',
+    pinnedOnly: true,
+  },
+  storage,
+)
+assert.deepEqual(readNotesFilters(storage), {
+  project: 'Marketing',
+  priority: 'High',
+  source: 'note',
+  sort: 'manual',
+  groupBy: 'project',
+  pinnedOnly: true,
+})
+
+storage.setItem(NOTES_FILTERS_KEY, 'not-json')
+assert.deepEqual(readNotesFilters(storage), defaultNotesFilters())
+assert.deepEqual(
+  parseNotesFilters({ source: 'nope', pinnedOnly: 'yes', sort: 'manual' }),
+  {
+    ...defaultNotesFilters(),
+    sort: 'manual',
+  },
+)
 
 console.log('notes-list tests passed')

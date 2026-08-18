@@ -17,6 +17,8 @@ import type {
   Subtask,
   Task,
   TimeLog,
+  NowPage,
+  Reminder,
   TodayPage,
   TodayPulse,
   WeekProgress,
@@ -209,12 +211,52 @@ export const api = {
 
   updateSubtask(
     id: string,
-    input: Partial<{ title: string; done: boolean; position: number; date: string }>,
+    input: Partial<{
+      title: string
+      done: boolean
+      position: number
+      date: string
+      pinned: boolean
+    }>,
   ) {
     return request<Subtask>(`/api/subtasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
     })
+  },
+
+  getNow(date: string) {
+    return request<NowPage>(`/api/now?date=${encodeURIComponent(date)}`)
+  },
+
+  createReminder(input: {
+    title: string
+    dueDate?: string
+    dueTime?: string | null
+  }) {
+    return request<Reminder>('/api/reminders', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+
+  updateReminder(
+    id: string,
+    input: Partial<{
+      title: string
+      dueDate: string
+      dueTime: string | null
+      done: boolean
+    }>,
+  ) {
+    return request<Reminder>(`/api/reminders/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+
+  deleteReminder(id: string) {
+    return request<void>(`/api/reminders/${id}`, { method: 'DELETE' })
   },
 
   deleteSubtask(id: string) {
@@ -365,6 +407,8 @@ export const api = {
     sort?: 'updated' | 'priority' | 'project' | 'manual'
     /** recent = last 14 days; older = before that; all = no recency filter. */
     scope?: 'recent' | 'older' | 'all'
+    limit?: number
+    pinned?: boolean
   }) {
     const params = new URLSearchParams()
     if (opts?.q) params.set('q', opts.q)
@@ -373,6 +417,8 @@ export const api = {
     if (opts?.source && opts.source !== 'all') params.set('source', opts.source)
     if (opts?.sort) params.set('sort', opts.sort)
     if (opts?.scope) params.set('scope', opts.scope)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.pinned) params.set('pinned', '1')
     const qs = params.toString()
     return request<{
       notes: import('./features/notes-list').NoteListItem[]

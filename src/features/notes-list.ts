@@ -64,9 +64,22 @@ export type NoteSection = {
 
 export const NOTES_GROUP_COLLAPSED_KEY = 'todo-app.notesGroupCollapsed'
 export const NOTES_LAYOUT_KEY = 'todo-app.notesLayout'
+export const NOTES_FILTERS_KEY = 'todo-app.notesFilters'
 
 /** Sentinel for “show every project” in note filters. */
 export const NOTES_PROJECT_ALL = 'All'
+
+export type NotesSourceFilter = 'all' | 'task' | 'note'
+
+/** Persisted Notes-tab filters. Search and “Show all” stay session-only. */
+export type NotesFilters = {
+  project: string
+  priority: string
+  source: NotesSourceFilter
+  sort: NoteSort
+  groupBy: NoteGroupBy
+  pinnedOnly: boolean
+}
 
 export const notesListCopy = {
   panelTitle: 'Notes',
@@ -74,13 +87,18 @@ export const notesListCopy = {
   newNote: 'New note',
   empty: 'No notes yet. Capture an idea, or open notes on any task.',
   emptyFiltered: 'No notes match these filters.',
+  emptyPinned: 'No pinned notes yet. Open a note and pin it to keep it here.',
   loading: 'Loading notes…',
   error: 'Couldn’t load notes. Check that the app server is running, then try again.',
   retry: 'Retry',
   searchPlaceholder: 'Search notes…',
+  arrange: 'Arrange',
   filterProject: 'Project',
   filterPriority: 'Priority',
   filterSource: 'Source',
+  filterPinned: 'Pinned',
+  filterPinnedAll: 'All notes',
+  filterPinnedOnly: 'Pinned',
   sourceAll: 'All',
   sourceTask: 'From tasks',
   sourceNote: 'Standalone',
@@ -113,8 +131,11 @@ export const notesListCopy = {
   layoutList: 'Rows',
   untitled: 'Untitled note',
   fromTask: 'Task',
+  pinnedBadge: 'Pinned',
   pin: 'Pin',
   unpin: 'Unpin',
+  pinnedToast: 'Pinned',
+  unpinnedToast: 'Unpinned',
   delete: 'Delete note',
   deleteConfirm: 'Delete this note permanently?',
   clearTaskConfirm: 'Clear notes on this task? The task itself stays.',
@@ -152,6 +173,87 @@ export function writeNotesLayout(
 ): void {
   try {
     storage.setItem(NOTES_LAYOUT_KEY, layout)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function defaultNotesFilters(): NotesFilters {
+  return {
+    project: NOTES_PROJECT_ALL,
+    priority: 'All',
+    source: 'all',
+    sort: 'updated',
+    groupBy: 'none',
+    pinnedOnly: false,
+  }
+}
+
+export function parseNoteSourceFilter(
+  raw: string | null | undefined,
+): NotesSourceFilter {
+  if (raw === 'task' || raw === 'note') return raw
+  return 'all'
+}
+
+export function parseNoteSort(raw: string | null | undefined): NoteSort {
+  if (
+    raw === 'priority' ||
+    raw === 'project' ||
+    raw === 'updated' ||
+    raw === 'manual'
+  ) {
+    return raw
+  }
+  return 'updated'
+}
+
+export function parsePinnedOnly(raw: unknown): boolean {
+  return raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === 'pinned'
+}
+
+export function parseNotesFilters(raw: unknown): NotesFilters {
+  const defaults = defaultNotesFilters()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaults
+  const obj = raw as Record<string, unknown>
+  const project =
+    typeof obj.project === 'string' && obj.project.trim()
+      ? obj.project.trim()
+      : defaults.project
+  const priority =
+    typeof obj.priority === 'string' && obj.priority.trim()
+      ? obj.priority.trim()
+      : defaults.priority
+  return {
+    project,
+    priority,
+    source: parseNoteSourceFilter(
+      typeof obj.source === 'string' ? obj.source : undefined,
+    ),
+    sort: parseNoteSort(typeof obj.sort === 'string' ? obj.sort : undefined),
+    groupBy: parseNoteGroupBy(
+      typeof obj.groupBy === 'string' ? obj.groupBy : undefined,
+    ),
+    pinnedOnly: parsePinnedOnly(obj.pinnedOnly),
+  }
+}
+
+export function readNotesFilters(storage: Storage = localStorage): NotesFilters {
+  try {
+    const raw = storage.getItem(NOTES_FILTERS_KEY)
+    if (!raw) return defaultNotesFilters()
+    return parseNotesFilters(JSON.parse(raw) as unknown)
+  } catch {
+    return defaultNotesFilters()
+  }
+}
+
+export function writeNotesFilters(
+  filters: NotesFilters,
+  storage: Storage = localStorage,
+): void {
+  try {
+    storage.setItem(NOTES_FILTERS_KEY, JSON.stringify(parseNotesFilters(filters)))
   } catch {
     /* ignore quota / private mode */
   }

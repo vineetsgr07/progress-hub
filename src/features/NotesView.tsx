@@ -38,11 +38,13 @@ import {
   notesListCopy,
   parseNoteGroupBy,
   parseNoteLayout,
+  readNotesFilters,
   readNotesGroupCollapsed,
   readNotesLayout,
   relativeUpdatedAt,
   sectionItemCount,
   subjectFromDetail,
+  writeNotesFilters,
   writeNotesGroupCollapsed,
   writeNotesLayout,
   type NoteGroupBy,
@@ -82,15 +84,17 @@ export function NotesView({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
-  const [project, setProject] = useState(NOTES_PROJECT_ALL)
-  const [priority, setPriority] = useState('All')
-  const [source, setSource] = useState<'all' | 'task' | 'note'>('all')
-  const [sort, setSort] = useState<NoteSort>('updated')
-  const [groupBy, setGroupBy] = useState<NoteGroupBy>('none')
+  const [project, setProject] = useState(() => readNotesFilters().project)
+  const [priority, setPriority] = useState(() => readNotesFilters().priority)
+  const [source, setSource] = useState(() => readNotesFilters().source)
+  const [sort, setSort] = useState<NoteSort>(() => readNotesFilters().sort)
+  const [groupBy, setGroupBy] = useState<NoteGroupBy>(() => readNotesFilters().groupBy)
+  const [pinnedOnly, setPinnedOnly] = useState(() => readNotesFilters().pinnedOnly)
   const [layout, setLayout] = useState<NoteLayout>(() => readNotesLayout())
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     readNotesGroupCollapsed(),
   )
+  const [arrangeOpen, setArrangeOpen] = useState(false)
   const sensors = useSensors(
     useSensor(TaskPointerSensor, {
       activationConstraint: { distance: TASK_DRAG_DISTANCE },
@@ -106,6 +110,17 @@ export function NotesView({
     if (groupBy === 'project' && sort === 'project') setSort('updated')
     if (groupBy === 'priority' && sort === 'priority') setSort('updated')
   }, [groupBy, sort])
+
+  useEffect(() => {
+    writeNotesFilters({
+      project,
+      priority,
+      source,
+      sort,
+      groupBy,
+      pinnedOnly,
+    })
+  }, [project, priority, source, sort, groupBy, pinnedOnly])
   const requestId = useRef(0)
   const olderRequestId = useRef(0)
   const notesRef = useRef<NoteListItem[] | null>(null)
@@ -129,7 +144,7 @@ export function NotesView({
   useEffect(() => {
     setShowOlder(false)
     setOlderNotes(null)
-  }, [debouncedQ, project, priority, source])
+  }, [debouncedQ, project, priority, source, pinnedOnly])
 
   useEffect(() => {
     const id = ++requestId.current
@@ -138,7 +153,6 @@ export function NotesView({
       setLoading(true)
     }
     setError(null)
-    const scope = searching ? 'all' : 'recent'
     void api
       .getNotes({
         q: debouncedQ || undefined,
@@ -146,12 +160,13 @@ export function NotesView({
         priority: priority === 'All' ? undefined : priority,
         source,
         sort,
-        scope,
+        scope: pinnedOnly ? 'all' : 'recent',
+        pinned: pinnedOnly || undefined,
       })
       .then((res) => {
         if (requestId.current !== id) return
         setNotes(res.notes)
-        if (!searching) setOlderCount(res.olderCount ?? 0)
+        if (!searching && !pinnedOnly) setOlderCount(res.olderCount ?? 0)
         else setOlderCount(0)
       })
       .catch(() => {
@@ -162,7 +177,7 @@ export function NotesView({
       .finally(() => {
         if (requestId.current === id) setLoading(false)
       })
-  }, [version, debouncedQ, project, priority, source, sort, searching])
+  }, [version, debouncedQ, project, priority, source, sort, searching, pinnedOnly])
 
   async function loadOlderNotes() {
     const id = ++olderRequestId.current
@@ -174,6 +189,7 @@ export function NotesView({
         source,
         sort,
         scope: 'older',
+        pinned: pinnedOnly || undefined,
       })
       if (olderRequestId.current !== id) return
       setOlderNotes(res.notes)
@@ -216,13 +232,19 @@ export function NotesView({
   )
 
   const canDrag = groupBy === 'none'
-  const showOlderToggle = !searching && olderCount > 0
+  const showOlderToggle = !searching && !pinnedOnly && olderCount > 0
   const hasRecent = (notes?.length ?? 0) > 0
-  const filteredEmpty =
+  const otherFiltersActive =
     Boolean(debouncedQ) ||
     project !== NOTES_PROJECT_ALL ||
     priority !== 'All' ||
     source !== 'all'
+  const filteredEmpty = otherFiltersActive || pinnedOnly
+  const showSourceBadge =
+    source === 'all' &&
+    (searching ||
+      project !== NOTES_PROJECT_ALL ||
+      priority !== 'All')
 
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
@@ -242,6 +264,7 @@ export function NotesView({
           | 'High'
           | 'Medium'
           | 'Low',
+        pinned: pinnedOnly,
       })
       onChanged()
       onOpen(subjectFromDetail(created), { focusTitle: true })
@@ -264,7 +287,7 @@ export function NotesView({
     try {
       await api.updateNote(item.id, { pinned: !item.pinned })
       onChanged()
-      onToast?.(item.pinned ? 'Unpinned' : 'Pinned')
+      onToast?.(item.pinned ? notesListCopy.unpinnedToast : notesListCopy.pinnedToast)
     } catch {
       onError?.('Couldn’t update pin. Try again.')
     }
@@ -331,6 +354,7 @@ export function NotesView({
                 item={item}
                 layout={layout}
                 colors={colors}
+                showSourceBadge={showSourceBadge}
                 busy={busy}
                 onOpen={() => void openItem(item)}
                 onTogglePin={() => void togglePin(item)}
@@ -345,6 +369,7 @@ export function NotesView({
               item={item}
               layout={layout}
               colors={colors}
+              showSourceBadge={showSourceBadge}
               draggable={false}
               onOpen={() => void openItem(item)}
               onTogglePin={() => void togglePin(item)}
@@ -376,7 +401,7 @@ export function NotesView({
           {notes && (
             <p className="notes-view-count">
               {notesListCopy.count(notes.length)}
-              {!searching && (
+              {!searching && !pinnedOnly && (
                 <span className="notes-view-count-hint">
                   {' '}
                   · {notesListCopy.recentHint}
@@ -385,6 +410,13 @@ export function NotesView({
             </p>
           )}
         </div>
+        <TextInput
+          className="notes-view-search"
+          value={q}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          placeholder={notesListCopy.searchPlaceholder}
+          aria-label={notesListCopy.searchPlaceholder}
+        />
         <Button
           color="dark"
           leftSection={<IconPlus size={16} stroke={1.75} />}
@@ -395,14 +427,31 @@ export function NotesView({
         </Button>
       </div>
 
-      <div className="notes-view-filters">
-        <TextInput
-          style={{ flex: 1, minWidth: 180 }}
-          value={q}
-          onChange={(e) => setQ(e.currentTarget.value)}
-          placeholder={notesListCopy.searchPlaceholder}
-          aria-label={notesListCopy.searchPlaceholder}
-        />
+      <ProjectFilterChips
+        projects={projects}
+        value={project}
+        onChange={setProject}
+      />
+
+      <button
+        type="button"
+        className="notes-view-arrange-toggle"
+        aria-expanded={arrangeOpen}
+        aria-controls="notes-arrange-panel"
+        onClick={() => setArrangeOpen((open) => !open)}
+      >
+        <span className="notes-view-section-chevron" aria-hidden>
+          {arrangeOpen ? (
+            <IconChevronDown size={16} stroke={1.75} />
+          ) : (
+            <IconChevronRight size={16} stroke={1.75} />
+          )}
+        </span>
+        {notesListCopy.arrange}
+      </button>
+
+      {arrangeOpen && (
+      <div className="notes-view-filters" id="notes-arrange-panel">
         <RowMeta
           value={priority}
           options={['All', ...PRIORITY_TAGS]}
@@ -413,6 +462,18 @@ export function NotesView({
               ? resolveTagSwatch('priority', priority, colors)
               : undefined
           }
+        />
+        <Select
+          w={140}
+          size="xs"
+          value={pinnedOnly ? 'pinned' : 'all'}
+          onChange={(v) => setPinnedOnly(v === 'pinned')}
+          data={[
+            { value: 'all', label: notesListCopy.filterPinnedAll },
+            { value: 'pinned', label: notesListCopy.filterPinnedOnly },
+          ]}
+          aria-label={notesListCopy.filterPinned}
+          allowDeselect={false}
         />
         <Select
           w={150}
@@ -427,7 +488,7 @@ export function NotesView({
           aria-label={notesListCopy.filterSource}
           allowDeselect={false}
         />
-        <div className="notes-view-levels" role="group" aria-label="Arrange notes">
+        <div className="notes-view-levels" role="group" aria-label={notesListCopy.arrange}>
           <Select
             w={140}
             size="xs"
@@ -500,12 +561,7 @@ export function NotesView({
           </div>
         </div>
       </div>
-
-      <ProjectFilterChips
-        projects={projects}
-        value={project}
-        onChange={setProject}
-      />
+      )}
 
       <div className="notes-view-body">
         {loading && <div className="empty">{notesListCopy.loading}</div>}
@@ -522,7 +578,11 @@ export function NotesView({
         {!loading && !error && notes && !hasRecent && !showOlderToggle && (
           <div className="empty">
             <strong>
-              {filteredEmpty ? notesListCopy.emptyFiltered : notesListCopy.empty}
+              {pinnedOnly && !otherFiltersActive
+                ? notesListCopy.emptyPinned
+                : filteredEmpty
+                  ? notesListCopy.emptyFiltered
+                  : notesListCopy.empty}
             </strong>
           </div>
         )}
@@ -672,6 +732,7 @@ function SortableNoteCard({
   item,
   layout,
   colors,
+  showSourceBadge,
   busy,
   onOpen,
   onTogglePin,
@@ -680,6 +741,7 @@ function SortableNoteCard({
   item: NoteListItem
   layout: NoteLayout
   colors: TagColorMap
+  showSourceBadge: boolean
   busy?: boolean
   onOpen: () => void
   onTogglePin: () => void
@@ -702,6 +764,7 @@ function SortableNoteCard({
       item={item}
       layout={layout}
       colors={colors}
+      showSourceBadge={showSourceBadge}
       draggable
       dragRef={setNodeRef}
       dragStyle={{
@@ -722,6 +785,7 @@ function NoteCard({
   item,
   layout,
   colors,
+  showSourceBadge,
   draggable,
   dragRef,
   dragStyle,
@@ -734,6 +798,7 @@ function NoteCard({
   item: NoteListItem
   layout: NoteLayout
   colors: TagColorMap
+  showSourceBadge: boolean
   draggable: boolean
   dragRef?: (node: HTMLElement | null) => void
   dragStyle?: CSSProperties
@@ -761,20 +826,21 @@ function NoteCard({
     >
       <div className="notes-card-top">
         <strong className="notes-card-title">{title}</strong>
-        {item.source === 'task' ? (
-          <span className="notes-card-badge">{notesListCopy.fromTask}</span>
-        ) : (
-          <span className="notes-card-badge notes-card-badge-standalone">
-            {notesListCopy.sourceNote}
-          </span>
+        {showSourceBadge &&
+          (item.source === 'task' ? (
+            <span className="notes-card-badge">{notesListCopy.fromTask}</span>
+          ) : (
+            <span className="notes-card-badge notes-card-badge-standalone">
+              {notesListCopy.sourceNote}
+            </span>
+          ))}
+        {item.pinned && (
+          <span className="notes-card-badge">{notesListCopy.pinnedBadge}</span>
         )}
-        {item.pinned && <span className="notes-card-badge">Pinned</span>}
       </div>
-      {!isList && (
-        <p className="notes-card-excerpt">
-          {previewBody || notesListCopy.cardPreviewEmpty}
-        </p>
-      )}
+      <p className="notes-card-excerpt">
+        {previewBody || notesListCopy.cardPreviewEmpty}
+      </p>
       <div className="notes-card-meta">
         <span
           className="notes-card-chip"

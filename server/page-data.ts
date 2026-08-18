@@ -14,13 +14,17 @@ import { db, getSetting } from './db.js'
 import { buildHabitsProgress } from './habits-history.js'
 import { STREAK_LOOKBACK_DAYS, isoDateKey, streakFromDayTotals, streakWindowStart } from './streak.js'
 import {
-  filterNotesByScope,
+  NOTES_EXCERPT_SQL_CHARS,
   notesExcerpt,
   notesHasBody,
-  notesRecentCutoff,
+  notesListCutoffIso,
+  notesStandaloneWhere,
+  notesTaskWhere,
   parseNoteScope,
   parseNoteSort,
   parseNoteSource,
+  parsePinnedOnly,
+  parseNotesLimit,
   parseNotesListOrder,
   sortNoteItems,
   type NoteListItem,
@@ -470,6 +474,8 @@ export type NotesQuery = {
   source?: string
   sort?: string
   scope?: string
+  limit?: string | number
+  pinned?: string | boolean
 }
 
 export async function loadNotes(opts?: NotesQuery): Promise<{
@@ -483,8 +489,19 @@ export async function loadNotes(opts?: NotesQuery): Promise<{
   const priority = String(opts?.priority || '').trim()
   const sourceFilter = parseNoteSource(String(opts?.source || ''))
   const sort = parseNoteSort(String(opts?.sort || ''))
-  const scope = parseNoteScope(String(opts?.scope || ''))
-  return loadNotesResolved({ q, project, priority, sourceFilter, sort, scope })
+  const pinnedOnly = parsePinnedOnly(String(opts?.pinned ?? ''))
+  const scope = pinnedOnly ? 'all' : parseNoteScope(String(opts?.scope || ''))
+  const limit = parseNotesLimit(opts?.limit)
+  return loadNotesResolved({
+    q,
+    project,
+    priority,
+    sourceFilter,
+    sort,
+    scope,
+    limit,
+    pinnedOnly,
+  })
 }
 
 async function loadNotesResolved(opts: {
@@ -494,17 +511,34 @@ async function loadNotesResolved(opts: {
   sourceFilter: NoteSource | 'all'
   sort: NoteSort
   scope: NoteScope
+  limit: number
+  pinnedOnly: boolean
 }): Promise<{ notes: NoteListItem[]; olderCount: number }> {
+  const cutoffIso = notesListCutoffIso()
+  const filter = {
+    q: opts.q,
+    project: opts.project,
+    priority: opts.priority,
+    scope: opts.scope,
+    cutoffIso,
+    pinnedOnly: opts.pinnedOnly,
+  }
   const items: NoteListItem[] = []
 
-  if (opts.sourceFilter === 'all' || opts.sourceFilter === 'task') {
+  if (
+    !opts.pinnedOnly &&
+    (opts.sourceFilter === 'all' || opts.sourceFilter === 'task')
+  ) {
+    const where = notesTaskWhere(filter)
     const tasks = (await db
       .prepare(
-        `SELECT id, title, notes, project_tag, priority, created_at, updated_at
+        `SELECT id, title, substr(notes, 1, ?) AS notes, project_tag, priority, created_at, updated_at
          FROM tasks
-         WHERE TRIM(notes) != ''`,
+         WHERE ${where.sql}`,
       )
-      .all()) as Array<Record<string, unknown>>
+      .all(NOTES_EXCERPT_SQL_CHARS, ...where.params)) as Array<
+      Record<string, unknown>
+    >
     for (const row of tasks) {
       const body = String(row.notes ?? '')
       if (!notesHasBody(body)) continue
@@ -523,12 +557,16 @@ async function loadNotesResolved(opts: {
   }
 
   if (opts.sourceFilter === 'all' || opts.sourceFilter === 'note') {
+    const where = notesStandaloneWhere(filter)
     const notes = (await db
       .prepare(
-        `SELECT id, title, body, project_tag, priority, pinned, created_at, updated_at
-         FROM standalone_notes`,
+        `SELECT id, title, substr(body, 1, ?) AS body, project_tag, priority, pinned, created_at, updated_at
+         FROM standalone_notes
+         WHERE ${where.sql}`,
       )
-      .all()) as Array<Record<string, unknown>>
+      .all(NOTES_EXCERPT_SQL_CHARS, ...where.params)) as Array<
+      Record<string, unknown>
+    >
     for (const row of notes) {
       items.push({
         id: String(row.id),
@@ -544,33 +582,45 @@ async function loadNotesResolved(opts: {
     }
   }
 
-  let filtered = items
-  if (opts.project) {
-    filtered = filtered.filter((n) => n.projectTag === opts.project)
-  }
-  if (opts.priority) {
-    filtered = filtered.filter((n) => n.priority === opts.priority)
-  }
-  if (opts.q) {
-    filtered = filtered.filter(
-      (n) =>
-        n.title.toLowerCase().includes(opts.q) ||
-        n.excerpt.toLowerCase().includes(opts.q) ||
-        n.projectTag.toLowerCase().includes(opts.q),
-    )
-  }
-
-  const cutoff = notesRecentCutoff()
   const olderCount =
-    opts.scope === 'recent'
-      ? filterNotesByScope(filtered, 'older', cutoff).length
-      : 0
-  const scoped = filterNotesByScope(filtered, opts.scope, cutoff)
+    opts.scope === 'recent' ? await countOlderNotes(opts) : 0
   const manualOrder = opts.sort === 'manual' ? await readNotesListOrder() : []
   return {
-    notes: sortNoteItems(scoped, opts.sort, manualOrder),
+    notes: sortNoteItems(items, opts.sort, manualOrder).slice(0, opts.limit),
     olderCount,
   }
+}
+
+async function countOlderNotes(opts: {
+  q: string
+  project: string
+  priority: string
+  sourceFilter: NoteSource | 'all'
+}): Promise<number> {
+  const cutoffIso = notesListCutoffIso()
+  const filter = {
+    q: opts.q,
+    project: opts.project,
+    priority: opts.priority,
+    scope: 'older' as const,
+    cutoffIso,
+  }
+  let total = 0
+  if (opts.sourceFilter === 'all' || opts.sourceFilter === 'task') {
+    const where = notesTaskWhere(filter)
+    const row = (await db
+      .prepare(`SELECT COUNT(*) AS c FROM tasks WHERE ${where.sql}`)
+      .get(...where.params)) as { c: number }
+    total += Number(row.c) || 0
+  }
+  if (opts.sourceFilter === 'all' || opts.sourceFilter === 'note') {
+    const where = notesStandaloneWhere(filter)
+    const row = (await db
+      .prepare(`SELECT COUNT(*) AS c FROM standalone_notes WHERE ${where.sql}`)
+      .get(...where.params)) as { c: number }
+    total += Number(row.c) || 0
+  }
+  return total
 }
 
 export async function loadTodayPage<T>(
@@ -579,7 +629,6 @@ export async function loadTodayPage<T>(
 ) {
   const { date, category = null, master = false } = opts
   const includeHabitsWeek = !master && category !== 'Projects'
-  const includeNotes = !master
 
   const tasksPromise = loadTaskRows(date, { category, master }).then((rows) =>
     mapTasks(rows, date),
@@ -594,21 +643,17 @@ export async function loadTodayPage<T>(
   }
 
   if (!includeHabitsWeek) {
-    const [tasks, stats, notes] = await Promise.all([
+    const [tasks, stats] = await Promise.all([
       tasksPromise,
       loadStats(date, { insight: false }),
-      includeNotes
-        ? loadNotes({ sort: 'updated', scope: 'recent' })
-        : Promise.resolve(undefined),
     ])
-    return { date, tasks, stats, notes }
+    return { date, tasks, stats }
   }
 
-  const [tasks, pulse, habits, notes] = await Promise.all([
+  const [tasks, pulse, habits] = await Promise.all([
     tasksPromise,
     loadTodayPulse(date),
     loadHabits(date),
-    loadNotes({ sort: 'updated', scope: 'recent' }),
   ])
   return {
     date,
@@ -616,7 +661,6 @@ export async function loadTodayPage<T>(
     stats: pulse.stats,
     week: pulse.week,
     habits,
-    notes,
   }
 }
 

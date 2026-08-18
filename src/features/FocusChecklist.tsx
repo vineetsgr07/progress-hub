@@ -14,11 +14,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { IconGripVertical, IconPlayerPlay, IconPlayerStop, IconX } from '@tabler/icons-react'
+import { IconGripVertical, IconPin, IconPinnedOff, IconPlayerPlay, IconPlayerStop, IconX } from '@tabler/icons-react'
 import type { Subtask } from '../types'
 import { formatDuration } from '../utils/date'
 import { sortFocusChecklist, visibleChecklist, partitionChecklist } from './focus-checklist'
 import { focusCopy } from './focus-copy'
+import { nowCopy } from './now-copy'
 import {
   sanitizeSubtaskHtml,
   subtaskDisplayHtml,
@@ -43,6 +44,7 @@ type Props = {
   onStartTimer: (subtaskId: string) => void
   onStopTimer: () => void
   onReorder: (orderedIds: string[]) => Promise<void>
+  onTogglePin?: (subtaskId: string, pinned: boolean) => void
 }
 
 export function FocusChecklist({
@@ -58,6 +60,7 @@ export function FocusChecklist({
   onStartTimer,
   onStopTimer,
   onReorder,
+  onTogglePin,
 }: Props) {
   const [draft, setDraft] = useState('')
   const [showDone, setShowDone] = useState(false)
@@ -99,6 +102,13 @@ export function FocusChecklist({
       ),
     )
     onToggle(subtaskId, done)
+  }
+
+  function handlePin(subtaskId: string, pinned: boolean) {
+    setItems((prev) =>
+      prev.map((s) => (s.id === subtaskId ? { ...s, pinned } : s)),
+    )
+    onTogglePin?.(subtaskId, pinned)
   }
 
   async function onDragEnd(event: DragEndEvent) {
@@ -180,6 +190,7 @@ export function FocusChecklist({
                         onStartTimer={onStartTimer}
                         onStopTimer={onStopTimer}
                         onAddBelow={() => void addBelow(s.id)}
+                        onTogglePin={onTogglePin ? handlePin : undefined}
                       />
                     )
                   })}
@@ -273,6 +284,7 @@ function FocusChecklistRow({
   onStartTimer,
   onStopTimer,
   onAddBelow,
+  onTogglePin,
 }: {
   subtask: Subtask
   timing: boolean
@@ -284,6 +296,7 @@ function FocusChecklistRow({
   onStartTimer: (subtaskId: string) => void
   onStopTimer: () => void
   onAddBelow: () => void
+  onTogglePin?: (subtaskId: string, pinned: boolean) => void
 }) {
   const plain = subtaskPlainText(s.title) || s.title
   const displayHtml = subtaskDisplayHtml(s.title)
@@ -404,6 +417,22 @@ function FocusChecklistRow({
         />
       </div>
       <div className="focus-checklist-actions">
+        {onTogglePin ? (
+          <button
+            type="button"
+            className={`focus-checklist-pin${s.pinned ? ' is-pinned' : ''}`}
+            disabled={busy}
+            aria-label={s.pinned ? nowCopy.unpin : nowCopy.pin}
+            title={s.pinned ? nowCopy.unpin : nowCopy.pin}
+            onClick={() => onTogglePin(s.id, !s.pinned)}
+          >
+            {s.pinned ? (
+              <IconPinnedOff {...ICON} aria-hidden />
+            ) : (
+              <IconPin {...ICON} aria-hidden />
+            )}
+          </button>
+        ) : null}
         {showTimerControl ? (
           <div
             className={`focus-checklist-timer${timing ? ' is-live' : ''}`}

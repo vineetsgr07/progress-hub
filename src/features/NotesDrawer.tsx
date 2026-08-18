@@ -4,6 +4,7 @@ import {
   Select,
   TextInput,
 } from '@mantine/core'
+import { IconPin, IconPinnedOff } from '@tabler/icons-react'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   useCallback,
@@ -36,6 +37,7 @@ export type DetailMetaPatch = {
   title?: string
   projectTag?: string
   priority?: Priority
+  pinned?: boolean
   category?: string
   cadenceWeekday?: number | null
   cadenceMonthDay?: number | null
@@ -599,13 +601,31 @@ export function NotesDrawer({
               </p>
             )}
           </div>
-          <ActionIcon
-            variant="subtle"
-            aria-label={notesCopy.close}
-            onClick={() => void requestClose()}
-          >
-            ×
-          </ActionIcon>
+          <div className="notes-drawer-header-actions">
+            {isStandalone && onMetaChange && (
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                aria-label={subject.pinned ? notesListCopy.unpin : notesListCopy.pin}
+                aria-pressed={Boolean(subject.pinned)}
+                disabled={busy}
+                onClick={() => void onMetaChange({ pinned: !subject.pinned })}
+              >
+                {subject.pinned ? (
+                  <IconPinnedOff size={18} stroke={1.5} />
+                ) : (
+                  <IconPin size={18} stroke={1.5} />
+                )}
+              </ActionIcon>
+            )}
+            <ActionIcon
+              variant="subtle"
+              aria-label={notesCopy.close}
+              onClick={() => void requestClose()}
+            >
+              ×
+            </ActionIcon>
+          </div>
         </header>
         <div className="notes-drawer-body">
           <NotesEditor

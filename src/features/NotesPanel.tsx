@@ -46,9 +46,9 @@ export function NotesPanel({
     project !== NOTES_PROJECT_ALL || priority !== 'All' || source !== 'all'
 
   useEffect(() => {
-    if (!filtersActive) {
-      setNotes(bootstrapNotes ?? null)
-      setLoading(bootstrapNotes == null)
+    if (!filtersActive && bootstrapNotes != null) {
+      setNotes(bootstrapNotes)
+      setLoading(false)
       setError(null)
       return
     }
@@ -224,7 +224,9 @@ export function NotesPanel({
                       {notesListCopy.sourceNote}
                     </span>
                   )}
-                  {item.pinned && <span className="notes-card-badge">Pinned</span>}
+                  {item.pinned && (
+                    <span className="notes-card-badge">{notesListCopy.pinnedBadge}</span>
+                  )}
                 </div>
                 {item.excerpt && (
                   <p className="notes-card-excerpt">{item.excerpt}</p>

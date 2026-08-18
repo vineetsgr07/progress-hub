@@ -4,7 +4,7 @@ Local React todo / progress tracker modeled after the [Daily Tracker](https://ex
 
 ## Product freeze (core)
 
-Primary surfaces: **Today / Master**, cadence visibility (All shows period tasks on cadence days, with capped incomplete overflow until done or the next cadence day), day complete, hours/timers, checklists, day goal, **This week** progress rail (Mon–Sun bars + completion ring), **Notes** (task notes + standalone notes), analytics, JSON **export + import**.
+Primary surfaces: **Now / Today / Master**, cadence visibility (All shows period tasks on cadence days, with capped incomplete overflow until done or the next cadence day), day complete, hours/timers, checklists, day goal, **This week** progress rail (Mon–Sun bars + completion ring), **Notes** (task notes + standalone notes), analytics, JSON **export + import**.
 
 Secondary (demoted): **Board** (Kanban) — column **roles** (`backlog` | `doing` | `done` | `custom`) are the sole workflow authority; list `sort_order` and board `board_sort` are independent. **Maps** — personal canvas (ideas, stickies, frames, colors, undo); not a collaborative Miro board (no freehand or multiplayer); fully isolated from tasks.
 
@@ -27,18 +27,21 @@ Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: tr
 ## Features
 
 - **Full-screen workspace** — sticky header, date navigation, category filters
+- **Now** — default landing. Only pinned checklist items and reminders due today (plus overdue incomplete reminders). No week rail, filters, or stats on this page.
 - **Today / Master** — complete tasks, live timers, hours, day goal
+- **Pin to Now** — pin icon beside the checklist timer; pinned items stay until you unpin. Completing hides them from Now for that day.
+- **Reminders** — title + optional time, added on Now. No phone notifications in this version.
 - **Focus Mode** — Play on Today opens a bare session view (title, checklist item, Until break countdown, Time worked); Leave keeps the timer, Stop ends it; gentle beep/notification when the countdown hits zero
 - **Checklist focus timers** — start/stop the timer on a checklist item; time locks to that item; parent task shows the sum; HOURS LOGGED shows a session strip (hover for task + checklist)
-- **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list
+- **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list; idle timers shrink to a play icon on phones
 - **Task notes** — small icon on the parent row opens the overlay rich-text drawer (resizable on desktop; full-screen on phone); main list stays put
-- **Notes hub** — scrollable Notes panel under Progress; Notes tab with search, project/priority/source filters, two-level arrange (Group by → Then sort within sections), pin/delete; create standalone notes from either surface
+- **Notes hub** — scrollable Notes panel under Progress; Notes tab with search, project/priority/source/pinned filters (saved in the browser), two-level arrange (Group by → Then sort within sections), pin/unpin from the list or an open standalone note; create standalone notes from either surface
 - **This week progress** — Mon–Sun bars, completion ring, streak, vs-last-week delta; click a day to jump the dashboard date
 - **Dense list rows** — Linear-style ~32px rows on desktop; larger hit targets on phone; quiet click-to-edit metadata menus, green done/timer accents
 - **Board** (secondary) — drag-and-drop cards; role-driven status; independent card order; horizontal scroll on narrow screens
 - **Maps** (secondary) — many named boards; ideas, stickies, frames, colors, undo/redo; autosaved; personal only (no freehand / collaboration)
 - **All Dates / Analytics / History**
-- **Export / Import** — full JSON backup and replace-restore (includes standalone notes, habits, mindmaps)
+- **Export / Import** — full JSON backup and replace-restore (includes standalone notes, habits, mindmaps, reminders)
 
 Data is stored locally in PGlite (`data/pglite`) during `npm run dev`, or in the **progressive-hub** Supabase Postgres database when `DATABASE_URL` is set.
 
@@ -46,7 +49,7 @@ Data is stored locally in PGlite (`data/pglite`) during `npm run dev`, or in the
 
 This app uses a **new** Supabase project (`progressive-hub`), not Actofy auth.
 
-1. In the new project SQL editor, run [`supabase/migrations/20260817120000_init_tracker.sql`](supabase/migrations/20260817120000_init_tracker.sql).
+1. In the new project SQL editor, run [`supabase/migrations/20260817120000_init_tracker.sql`](supabase/migrations/20260817120000_init_tracker.sql), then [`supabase/migrations/20260818010000_now_pins_reminders.sql`](supabase/migrations/20260818010000_now_pins_reminders.sql) (pins + reminders). Existing projects only need the second file.
 2. Authentication → Providers → Google: paste the new Google OAuth client ID and secret.
 3. Authentication → Providers → **Email**: enable. Turn on email OTP / magic-link codes (6-digit). The home-screen app signs in this way so iOS never leaves for Safari.
 4. Add authorized redirect URI in Google Cloud: `https://your-project-ref.supabase.co/auth/v1/callback`.
@@ -86,7 +89,7 @@ Opens:
 | `npm run server` | API only |
 | `npm run client` | Vite only |
 | `npm run build` | Production frontend build (includes PWA assets) |
-| `npm test` | Cadence + API + notes + week + progress-copy + notes-list + drawer width + focus |
+| `npm test` | Cadence + API + notes + week + progress-copy + notes-list + drawer width + focus + now/reminders |
 
 ## API (local)
 
@@ -95,7 +98,9 @@ Opens:
 - `PATCH /api/tasks/reorder` — Today/Master list drag order (`sort_order`)
 - `PATCH /api/tasks/:id/subtasks/reorder` — checklist drag order
 - `POST /api/tasks/:id/subtasks`
-- `PATCH/DELETE /api/subtasks/:id`
+- `PATCH/DELETE /api/subtasks/:id` — checklist title/done/pin
+- `GET /api/now?date=` — pinned open checklist items + reminders due that day (and overdue)
+- `GET/POST /api/reminders` · `PATCH/DELETE /api/reminders/:id`
 - `GET /api/board` — columns + tasks (ordered by `board_sort`)
 - `POST /api/board/columns` — optional `role`
 - `PATCH /api/board/columns/:id` — name/color/`role`
@@ -104,13 +109,13 @@ Opens:
 - `PATCH /api/board/move` — board drag persistence (`board_sort` only)
 - `PATCH /api/day-entries/:taskId` — complete, hours, start/stop timer
 - `GET/PUT /api/goal`
-- `GET /api/today?date=&category=&master=` — Today/Master page bootstrap (tasks + stats; habits/week/notes when those panels mount)
+- `GET /api/today?date=&category=&master=` — Today/Master page bootstrap (tasks + stats; habits/week when those panels mount)
 - `GET /api/today/pulse?date=` — stats + week after a Today mutation
 - `GET /api/analytics?date=` — Analytics bootstrap (insight stats + 28-day habits progress)
 - `GET /api/stats`
 - `GET /api/stats/progress?date=&range=day|week|month` — cadence-honest completion series (Analytics)
 - `GET /api/stats/week?date=` — Mon–Sun week progress for the dashboard rail
-- `GET /api/notes` — unified note list (`q`, `project`, `priority`, `source`, `sort`)
+- `GET /api/notes` — unified note list (`q`, `project`, `priority`, `source`, `sort`, `scope=recent|older|all`, `limit` default 50)
 - `GET /api/notes/:source/:id` — full note body (`source` = `task` | `note`)
 - `POST /api/notes` · `PATCH/DELETE /api/notes/:id` — standalone notes
 - `POST /api/notes/task/:id/clear` — clear a task’s notes field

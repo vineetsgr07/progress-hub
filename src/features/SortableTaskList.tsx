@@ -31,6 +31,7 @@ import { RowMeta } from './RowMeta'
 import { TimeControl } from './TimeControl'
 import { focusCopy } from './focus-copy'
 import { unlockFocusAudio } from './focus-signal'
+import { nowCopy } from './now-copy'
 import { taskCopy } from './task-copy'
 import { notesPreviewText } from './notes-html'
 import {
@@ -1056,6 +1057,20 @@ function SortableTaskBlock({
                 setTasks((prev) => mergeSubtask(prev, task.id, updated))
               },
               { refresh: false, busy: false, refreshStats: true },
+            )
+          }}
+          onTogglePin={(id, pinned) => {
+            setTasks((prev) => patchSubtaskLocal(prev, task.id, id, { pinned }))
+            void onRun(
+              async () => {
+                const updated = await api.updateSubtask(id, { pinned })
+                setTasks((prev) => mergeSubtask(prev, task.id, updated))
+              },
+              {
+                success: pinned ? nowCopy.pinnedToast : nowCopy.unpinnedToast,
+                refresh: false,
+                busy: false,
+              },
             )
           }}
           onAdd={(title) =>
