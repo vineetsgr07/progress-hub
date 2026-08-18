@@ -14,6 +14,8 @@ Now is the same-day work surface. The right column shows how close the selected 
 - When-chip: date required (defaults to the viewed day), time optional. Another date saves and leaves Now.
 - Empty pulse is not 0%. 100% is a quiet “That’s the day”.
 
+Pulse math lives in [`server/now-progress.ts`](../server/now-progress.ts) for the API and [`src/features/now-progress.ts`](../src/features/now-progress.ts) for the client. Do not import `src/` from `server/` — Vercel’s function cannot resolve that.
+
 ## Acceptance
 
 - AC1: Overdue and later reminders are absent from `GET /api/now` for date D.

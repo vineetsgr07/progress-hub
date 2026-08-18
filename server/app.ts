@@ -57,7 +57,7 @@ import {
   pendingRemindersForDate,
   remindersDueOnDate,
 } from './reminders.js'
-import { nowProgressFromLists } from '../src/features/now-progress.ts'
+import { nowProgressFromLists } from './now-progress.js'
 
 export async function createApp() {
   await migrate()
