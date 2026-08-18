@@ -13,6 +13,7 @@ import {
 import { db, getSetting } from './db.js'
 import { buildHabitsProgress } from './habits-history.js'
 import { STREAK_LOOKBACK_DAYS, isoDateKey, streakFromDayTotals, streakWindowStart } from './streak.js'
+import { DAILY_DONE_AS_OF_SQL } from './subtask-day-done.js'
 import {
   NOTES_EXCERPT_SQL_CHARS,
   notesExcerpt,
@@ -127,15 +128,13 @@ export async function loadStats(
            COUNT(*) AS total,
            SUM(
              CASE
-               WHEN t.category = 'Daily' THEN COALESCE(sds.done, 0)
+               WHEN t.category = 'Daily' THEN ${DAILY_DONE_AS_OF_SQL}
                WHEN s.done = 1 THEN 1
                ELSE 0
              END
            ) AS done
          FROM subtasks s
          JOIN tasks t ON t.id = s.task_id
-         LEFT JOIN subtask_day_state sds
-           ON sds.subtask_id = s.id AND sds.date = ?
          WHERE s.task_id IN (${placeholders})`,
       )
       .get(date, ...taskIds)) as { total: number; done: number | null }

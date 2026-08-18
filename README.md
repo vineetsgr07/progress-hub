@@ -33,7 +33,7 @@ Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: tr
 - **Reminders** — title + optional time, added on Now. Undone items carry forward to later days. No phone notifications in this version.
 - **Focus Mode** — Play on Today opens a bare session view (title, checklist item, Until break countdown, Time worked); Leave keeps the timer, Stop ends it; gentle beep/notification when the countdown hits zero
 - **Checklist focus timers** — start/stop the timer on a checklist item; time locks to that item; parent task shows the sum; HOURS LOGGED shows a session strip (hover for task + checklist)
-- **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list; idle timers shrink to a play icon on phones
+- **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list; idle timers shrink to a play icon on phones. Daily item checks carry forward to later days; the parent Daily still resets each morning. Rituals that should reset belong in Habits.
 - **Task notes** — small icon on the parent row opens the overlay rich-text drawer (resizable on desktop; full-screen on phone); main list stays put
 - **Notes hub** — scrollable Notes panel under Progress; Notes tab with search, project/priority/source/pinned filters (saved in the browser), two-level arrange (Group by → Then sort within sections), pin/unpin from the list or an open standalone note; create standalone notes from either surface
 - **This week progress** — Mon–Sun bars, completion ring, streak, vs-last-week delta; click a day to jump the dashboard date

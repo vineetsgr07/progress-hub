@@ -29,6 +29,7 @@ import {
 import { reconcileSheetSubtasks, seedIfEmpty } from './seed.js'
 import { requireAuth } from './auth.js'
 import { mergeNoteOrder, noteItemKey } from './notes-list.js'
+import { DAILY_DONE_AS_OF_SQL } from './subtask-day-done.js'
 import {
   NOTES_LIST_ORDER_KEY,
   loadAnalyticsPage,
@@ -164,10 +165,8 @@ async function loadSubtasks(
     return (
       await db
         .prepare(
-          `SELECT s.*, COALESCE(sds.done, 0) AS day_done
+          `SELECT s.*, ${DAILY_DONE_AS_OF_SQL} AS day_done
            FROM subtasks s
-           LEFT JOIN subtask_day_state sds
-             ON sds.subtask_id = s.id AND sds.date = ?
            WHERE s.task_id = ?
            ORDER BY s.position ASC, s.created_at ASC`,
         )
@@ -366,10 +365,8 @@ async function mapTasks(rows: Record<string, unknown>[], date: string) {
 
   const subRows = (await db
     .prepare(
-      `SELECT s.*, COALESCE(sds.done, 0) AS day_done
+      `SELECT s.*, ${DAILY_DONE_AS_OF_SQL} AS day_done
        FROM subtasks s
-       LEFT JOIN subtask_day_state sds
-         ON sds.subtask_id = s.id AND sds.date = ?
        WHERE s.task_id IN (${placeholders})
        ORDER BY s.position ASC, s.created_at ASC`,
     )
@@ -1035,8 +1032,8 @@ app.patch('/api/subtasks/:id', async (req, res) => {
     const done = req.body.done ? 1 : 0
     if (done) await stopRunningTimerForSubtask(String(row.task_id), String(req.params.id), date!)
     await db.prepare(`
-      UPDATE subtasks SET title = ?, position = ?, pinned = ?, pin_sort = ?, updated_at = ? WHERE id = ?
-    `).run(title, position, pinned, pinSort, now, req.params.id)
+      UPDATE subtasks SET title = ?, done = ?, position = ?, pinned = ?, pin_sort = ?, updated_at = ? WHERE id = ?
+    `).run(title, done, position, pinned, pinSort, now, req.params.id)
     await db.prepare(`
       INSERT INTO subtask_day_state (subtask_id, date, done, updated_at)
       VALUES (?, ?, ?, ?)
@@ -1074,17 +1071,19 @@ app.patch('/api/subtasks/:id', async (req, res) => {
     string,
     unknown
   >
-  // Daily without date: still return day-scoped view for today when possible
+  // Daily without a done toggle: still return done as of today when possible
   if (isDaily) {
     const viewDate = date || todayISO()
     const day = await db
       .prepare(
-        `SELECT done FROM subtask_day_state WHERE subtask_id = ? AND date = ?`,
+        `SELECT done FROM subtask_day_state
+         WHERE subtask_id = ? AND substr(cast(date as text), 1, 10) <= ?
+         ORDER BY substr(cast(date as text), 1, 10) DESC LIMIT 1`,
       )
       .get(req.params.id, viewDate) as { done: number } | undefined
     res.json(
       mapSubtask(updated, {
-        doneOverride: day ? Boolean(day.done) : false,
+        doneOverride: day ? Boolean(day.done) : Number(updated.done) === 1,
       }),
     )
     return

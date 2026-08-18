@@ -1,5 +1,7 @@
 # Today All: Projects off always-on
 
+Related (2026-08-18): Daily checklist items carry forward — [[CHECKLIST_CARRY_FORWARD]].
+
 ## Call
 
 Stop auto-listing every `Projects` task on Today **All**. Keep Daily always-on; include Projects on All only when they have a `day_entry` for that date (schedule, start, complete, or create with add-to-today). Projects chip still lists all project tasks. No due-date field.

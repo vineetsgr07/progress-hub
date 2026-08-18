@@ -159,7 +159,7 @@ try {
     assert.equal(card.status, 'done')
   }
 
-  // ---- day-scoped subtasks for Daily; permanent for Weekly ----
+  // ---- Daily checklist done carries forward; parent day-complete still resets ----
   {
     const daily = (await req('POST', '/api/tasks', {
       title: 'Daily checklist',
@@ -173,23 +173,43 @@ try {
 
     const dayA = '2026-08-06'
     const dayB = '2026-08-07'
-    await req('PATCH', `/api/subtasks/${daily.subtasks[0].id}`, {
-      done: true,
+    const dayC = '2026-08-08'
+    const dayD = '2026-08-09'
+    const itemId = daily.subtasks[0].id
+    type DayTask = {
+      id: string
+      subtasks: Array<{ done: boolean }>
+      entry: { completed: boolean } | null
+    }
+    async function dailyOn(iso: string) {
+      const list = await req('GET', `/api/tasks?date=${iso}`)
+      return (list.json as { tasks: DayTask[] }).tasks.find((t) => t.id === daily.id)!
+    }
+
+    await req('PATCH', `/api/subtasks/${itemId}`, { done: true, date: dayA })
+    await req('PATCH', `/api/day-entries/${daily.id}`, {
       date: dayA,
+      completed: true,
     })
 
-    const onA = await req('GET', `/api/tasks?date=${dayA}`)
-    const taskA = (
-      onA.json as { tasks: Array<{ id: string; subtasks: Array<{ done: boolean }> }> }
-    ).tasks.find((t) => t.id === daily.id)!
+    const taskA = await dailyOn(dayA)
     assert.equal(taskA.subtasks[0].done, true)
+    assert.equal(taskA.entry?.completed, true)
 
     await req('POST', `/api/tasks/${daily.id}/schedule`, { date: dayB })
-    const onB = await req('GET', `/api/tasks?date=${dayB}`)
-    const taskB = (
-      onB.json as { tasks: Array<{ id: string; subtasks: Array<{ done: boolean }> }> }
-    ).tasks.find((t) => t.id === daily.id)!
-    assert.equal(taskB.subtasks[0].done, false, 'Daily subtask done is day-scoped')
+    const taskB = await dailyOn(dayB)
+    assert.equal(taskB.subtasks[0].done, true, 'Daily checklist done carries to the next day')
+    assert.equal(taskB.entry?.completed, false, 'parent Daily still resets')
+
+    await req('POST', `/api/tasks/${daily.id}/schedule`, { date: dayC })
+    await req('PATCH', `/api/subtasks/${itemId}`, { done: false, date: dayC })
+    const taskC = await dailyOn(dayC)
+    assert.equal(taskC.subtasks[0].done, false, 'uncheck on a later day sticks')
+
+    await req('POST', `/api/tasks/${daily.id}/schedule`, { date: dayD })
+    const taskD = await dailyOn(dayD)
+    assert.equal(taskD.subtasks[0].done, false, 'uncheck carries forward')
+    assert.equal((await dailyOn(dayA)).subtasks[0].done, true, 'earlier day keeps its snapshot')
 
     const weekly = (await req('POST', '/api/tasks', {
       title: 'Weekly checklist',
@@ -210,6 +230,42 @@ try {
       w2.json as { tasks: Array<{ id: string; subtasks: Array<{ done: boolean }> }> }
     ).tasks.find((t) => t.id === weekly.id)!
     assert.equal(wTask2.subtasks[0].done, true, 'non-Daily subtask done is permanent')
+  }
+
+  // ---- old prod write: day-state only, subtasks.done stays 0 ----
+  {
+    const daily = (await req('POST', '/api/tasks', {
+      title: 'Legacy day-state checklist',
+      category: 'Daily',
+      addToToday: true,
+      date,
+      subtasks: ['Carry me'],
+    })).json as { id: string; subtasks: Array<{ id: string; done: boolean }> }
+    const itemId = daily.subtasks[0].id
+    const dayA = '2026-08-06'
+    const dayB = '2026-08-07'
+    await db.prepare(`UPDATE subtasks SET done = 0 WHERE id = ?`).run(itemId)
+    await db.prepare(`
+      INSERT INTO subtask_day_state (subtask_id, date, done, updated_at)
+      VALUES (?, ?, 1, ?)
+    `).run(itemId, `${dayA}T07:00:00.000Z`, new Date().toISOString())
+    await req('POST', `/api/tasks/${daily.id}/schedule`, { date: dayB })
+    const onB = await req('GET', `/api/tasks?date=${dayB}`)
+    const taskB = (
+      onB.json as {
+        tasks: Array<{
+          id: string
+          subtasks: Array<{ done: boolean }>
+          entry: { completed: boolean } | null
+        }>
+      }
+    ).tasks.find((t) => t.id === daily.id)!
+    assert.equal(
+      taskB.subtasks[0].done,
+      true,
+      'legacy day-state-only write still done the next day',
+    )
+    assert.equal(taskB.entry?.completed, false, 'parent Daily still resets')
   }
 
   // ---- empty checklist title allowed (Enter-to-add-below) ----
