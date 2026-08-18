@@ -1578,6 +1578,13 @@ try {
       items: Array<{ id: string; pinned: boolean; done: boolean; taskTitle: string }>
       reminders: Array<{ id: string; title: string }>
       habits: Array<{ id: string; title: string; completed: boolean }>
+      progress: {
+        checklist: { completed: number; total: number }
+        habits: { completed: number; total: number }
+        reminders: { completed: number; total: number }
+        percent: number
+        overdueOpen: number
+      }
     }
     assert.equal(nowBody.date, date)
     assert.equal(nowBody.items.length, 1)
@@ -1586,8 +1593,12 @@ try {
     assert.ok(!nowBody.items.some((item) => item.id === parent.subtasks[1].id))
     assert.deepEqual(
       nowBody.reminders.map((r) => r.title),
-      ['Overdue call', 'Today note'],
+      ['Today note'],
     )
+    assert.equal(nowBody.progress.checklist.total, 1)
+    assert.equal(nowBody.progress.checklist.completed, 0)
+    assert.equal(nowBody.progress.reminders.total, 1)
+    assert.equal(nowBody.progress.overdueOpen, 1)
 
     const renamed = await req('PATCH', `/api/reminders/${remTodayId}`, {
       title: 'Line one\nLine two',
@@ -1609,7 +1620,7 @@ try {
       (nowAfterRemReorder.json as { reminders: Array<{ id: string; title: string }> }).reminders.map(
         (r) => r.id,
       ),
-      [remTodayId, remOverdueId],
+      [remTodayId],
     )
     assert.equal(
       (
@@ -1624,8 +1635,15 @@ try {
     const nextReminders = (
       nextDay.json as { reminders: Array<{ title: string }> }
     ).reminders.map((r) => r.title)
-    assert.ok(nextReminders.includes('Line one\nLine two'))
-    assert.ok(nextReminders.includes('Overdue call'))
+    assert.ok(!nextReminders.includes('Line one\nLine two'))
+    assert.ok(!nextReminders.includes('Overdue call'))
+    const laterNow = await req('GET', '/api/now?date=2026-12-01')
+    assert.deepEqual(
+      (laterNow.json as { reminders: Array<{ title: string }> }).reminders.map(
+        (r) => r.title,
+      ),
+      ['Later'],
+    )
     const water = nowBody.habits.find((h) => h.id === nowHabitId)
     assert.ok(water)
     assert.equal(water?.completed, false)
@@ -1708,8 +1726,13 @@ try {
     })
     assert.equal(donePin.status, 200)
     const nowAfterDone = await req('GET', `/api/now?date=${date}`)
-    const afterDone = nowAfterDone.json as { items: Array<{ id: string }> }
+    const afterDone = nowAfterDone.json as {
+      items: Array<{ id: string }>
+      progress: { checklist: { completed: number; total: number } }
+    }
     assert.ok(!afterDone.items.some((item) => item.id === parent.subtasks[0].id))
+    assert.equal(afterDone.progress.checklist.completed, 1)
+    assert.equal(afterDone.progress.checklist.total, 2)
 
     const exported = await req('GET', '/api/export')
     assert.equal(exported.status, 200)

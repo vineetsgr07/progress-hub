@@ -62,6 +62,7 @@ import {
 import { notesListCopy, type NotesSubject } from './features/notes-list'
 import { NowView } from './features/NowView'
 import { nowCopy } from './features/now-copy'
+import { RemindersView } from './features/RemindersView'
 import { frequencyFilterLabel, taskCopy } from './features/task-copy'
 import { historyCopy } from './features/history-copy'
 import { themeCopy } from './features/theme-copy'
@@ -122,6 +123,7 @@ const EMPTY_DRAFT: TaskDraft = {
 const NAV_ITEMS: Array<{ value: ViewTab; label: string; primary?: boolean }> = [
   { value: 'now', label: nowCopy.nav, primary: true },
   { value: 'today', label: taskCopy.navToday, primary: true },
+  { value: 'reminders', label: nowCopy.navReminders, primary: true },
   { value: 'notes', label: taskCopy.navNotes, primary: true },
   { value: 'master', label: taskCopy.navMaster, primary: true },
   { value: 'maps', label: taskCopy.navMaps },
@@ -901,6 +903,16 @@ export default function App() {
                 if (action === 'start') await startSubtaskTimerFor(taskId, sid)
                 else await stopTaskTimer(taskId)
               }}
+              onError={setError}
+              onToast={flash}
+              onDateChange={setDate}
+              onOpenReminders={() => setTab('reminders')}
+            />
+          )}
+          {tab === 'reminders' && (
+            <RemindersView
+              date={date}
+              busy={busy}
               onError={setError}
               onToast={flash}
             />

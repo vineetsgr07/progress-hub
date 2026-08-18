@@ -21,6 +21,7 @@ export type ViewTab =
   | 'notes'
   | 'habits'
   | 'maps'
+  | 'reminders'
 
 export type ColumnRole = 'backlog' | 'doing' | 'done' | 'custom'
 
@@ -102,11 +103,25 @@ export type PinnedChecklistItem = Subtask & {
   timerSubtaskId: string | null
 }
 
+export type NowCount = {
+  completed: number
+  total: number
+}
+
+export type NowProgress = {
+  checklist: NowCount
+  habits: NowCount
+  reminders: NowCount
+  percent: number
+  overdueOpen: number
+}
+
 export type NowPage = {
   date: string
   items: PinnedChecklistItem[]
   reminders: Reminder[]
   habits: Habit[]
+  progress: NowProgress
 }
 
 export type Board = {

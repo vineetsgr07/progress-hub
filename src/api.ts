@@ -236,6 +236,10 @@ export const api = {
     })
   },
 
+  getReminders() {
+    return request<{ date: string; reminders: Reminder[] }>('/api/reminders')
+  },
+
   createReminder(input: {
     title: string
     dueDate?: string

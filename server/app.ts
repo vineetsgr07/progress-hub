@@ -52,9 +52,12 @@ import {
 import {
   isIsoDate,
   mapReminder,
+  overdueOpenCount,
   parseDueTime,
   pendingRemindersForDate,
+  remindersDueOnDate,
 } from './reminders.js'
+import { nowProgressFromLists } from '../src/features/now-progress.ts'
 
 export async function createApp() {
   await migrate()
@@ -321,11 +324,18 @@ async function loadNowPage(date: string) {
   const tasksById = new Map(mapped.map((task) => [String(task.id), task]))
 
   const items = []
+  let checklistCompleted = 0
+  let checklistTotal = 0
   for (const pin of pinnedRows) {
     const task = tasksById.get(String(pin.task_id))
     if (!task) continue
     const sub = task.subtasks.find((s) => s.id === pin.id)
-    if (!sub || !sub.pinned || sub.done) continue
+    if (!sub || !sub.pinned) continue
+    checklistTotal += 1
+    if (sub.done) {
+      checklistCompleted += 1
+      continue
+    }
     items.push({
       ...sub,
       taskTitle: String(task.title),
@@ -341,11 +351,20 @@ async function loadNowPage(date: string) {
     db.prepare(`SELECT * FROM reminders`).all(),
     loadHabits(date),
   ])
+  const mappedReminders = reminderRows.map(mapReminder)
+  const reminders = remindersDueOnDate(mappedReminders, date)
   return {
     date,
     items,
-    reminders: pendingRemindersForDate(reminderRows.map(mapReminder), date),
+    reminders,
     habits: habitsPage.habits,
+    progress: nowProgressFromLists({
+      checklistCompleted,
+      checklistTotal,
+      habits: habitsPage.habits,
+      remindersDue: reminders,
+      overdueOpen: overdueOpenCount(mappedReminders, date),
+    }),
   }
 }
 

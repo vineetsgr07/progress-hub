@@ -49,6 +49,54 @@ export function pendingRemindersForDate(
   return sortReminders(items.filter((item) => isPendingReminder(item, viewDate)))
 }
 
+/** Reminders scheduled for this calendar day, including done. */
+export function remindersDueOnDate(
+  items: ReminderRow[],
+  viewDate: string,
+): ReminderRow[] {
+  return sortReminders(items.filter((item) => item.dueDate === viewDate))
+}
+
+/** Incomplete reminders scheduled for this calendar day. */
+export function openRemindersDueOnDate(
+  items: ReminderRow[],
+  viewDate: string,
+): ReminderRow[] {
+  return remindersDueOnDate(items, viewDate).filter((item) => !item.done)
+}
+
+export function overdueOpenCount(
+  items: Array<Pick<ReminderRow, 'dueDate' | 'done'>>,
+  viewDate: string,
+): number {
+  return items.filter((item) => !item.done && item.dueDate < viewDate).length
+}
+
+export type ReminderInbox = {
+  overdue: ReminderRow[]
+  today: ReminderRow[]
+  later: ReminderRow[]
+  done: ReminderRow[]
+}
+
+export function groupReminderInbox(
+  items: ReminderRow[],
+  viewDate: string,
+): ReminderInbox {
+  return {
+    overdue: sortReminders(
+      items.filter((item) => !item.done && item.dueDate < viewDate),
+    ),
+    today: sortReminders(
+      items.filter((item) => !item.done && item.dueDate === viewDate),
+    ),
+    later: sortReminders(
+      items.filter((item) => !item.done && item.dueDate > viewDate),
+    ),
+    done: sortReminders(items.filter((item) => item.done)),
+  }
+}
+
 export function mapReminder(row: Record<string, unknown>): ReminderRow {
   return {
     id: String(row.id),

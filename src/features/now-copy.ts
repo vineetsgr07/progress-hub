@@ -1,5 +1,6 @@
 export const nowCopy = {
   nav: 'Now',
+  navReminders: 'Reminders',
   tasks: 'Tasks',
   habits: 'Habits',
   reminders: 'Reminders',
@@ -14,10 +15,17 @@ export const nowCopy = {
   hideDone: 'Hide done',
   showAllAria: 'Show completed habits',
   hideDoneAria: 'Hide completed habits',
+  showAllRemindersAria: 'Show completed reminders',
+  hideDoneRemindersAria: 'Hide completed reminders',
   addReminder: 'Add a reminder',
   addReminderShort: 'Add',
   addPlaceholder: '+ Add a reminder',
   timeAria: 'Reminder time',
+  whenEmpty: 'When',
+  whenAria: 'Set date and time',
+  whenDueAria: (label: string) => `Due ${label}`,
+  clearTime: 'No time',
+  savedFor: (label: string) => `Saved for ${label}`,
   pin: 'Pin to Now',
   unpin: 'Unpin from Now',
   pinnedToast: 'Pinned to Now',
@@ -37,4 +45,24 @@ export const nowCopy = {
   dragReminder: (title: string) =>
     `Drag to reorder ${title || 'reminder'}`,
   reorderFailed: 'Couldn’t save that order. Try again.',
+  pulseTitle: 'This day',
+  pulseEmpty: 'Pin a checklist item, check a habit, or add a reminder for this day.',
+  pulseDone: 'That’s the day',
+  pulseSummary: (completed: number, total: number, percent: number) =>
+    `${completed} of ${total} · ${percent}%`,
+  pulseChecklist: 'Checklist',
+  pulseHabits: 'Habits',
+  pulseReminders: 'Reminders',
+  pulseMeter: (label: string, completed: number, total: number) =>
+    `${label}: ${completed} of ${total}`,
+  pulseAria: (completed: number, total: number, percent: number) =>
+    total > 0
+      ? `This day: ${completed} of ${total} done, ${percent}%`
+      : 'This day: nothing selected yet',
+  overdueOpen: (n: number) => (n === 1 ? '1 still open' : `${n} still open`),
+  overdueAria: 'Open reminders that are still waiting',
+  prevDay: 'Previous day',
+  nextDay: 'Next day',
+  dateAria: 'Day for Now',
+  jumpToday: 'Today',
 } as const

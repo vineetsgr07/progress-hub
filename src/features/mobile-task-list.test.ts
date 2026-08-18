@@ -90,6 +90,21 @@ assert.match(
 )
 assert.match(
   css,
+  /\.now-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*320px/,
+  'Now desktop layout keeps a 320px pulse column',
+)
+assert.match(
+  phone,
+  /\.now-layout\s*\{[^}]*grid-template-columns:\s*1fr/,
+  'phone Now stacks the pulse above the lists',
+)
+assert.match(
+  phone,
+  /\.now-side\s*\{[^}]*order:\s*-1/,
+  'phone Now pulse appears first',
+)
+assert.match(
+  css,
   /\.now-item\.is-sortable\s*\{[^}]*touch-action:\s*pan-y/,
   'Now task rows allow vertical scroll before a touch drag',
 )

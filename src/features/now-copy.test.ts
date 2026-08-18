@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { nowCopy } from './now-copy.ts'
 
 assert.equal(nowCopy.nav, 'Now')
+assert.equal(nowCopy.navReminders, 'Reminders')
 assert.equal(nowCopy.emptyTasks, 'Pin a checklist item from Today.')
 assert.equal(nowCopy.emptyHabits, 'Add habits on Today.')
 assert.equal(nowCopy.emptyReminders, 'Nothing waiting. Add a reminder.')
@@ -25,11 +26,13 @@ assert.equal(nowCopy.dragAria('Write brief'), 'Drag to reorder Write brief')
 assert.equal(nowCopy.dragReminder('Call'), 'Drag to reorder Call')
 assert.equal(nowCopy.editReminder, 'Edit reminder')
 assert.doesNotMatch(nowCopy.reorderFailed, /\/api|SQL|stack/i)
+assert.equal(nowCopy.pulseDone, 'That’s the day')
+assert.equal(nowCopy.savedFor('19 Aug'), 'Saved for 19 Aug')
+assert.doesNotMatch(nowCopy.pulseEmpty, /\/api|SQL|stack/i)
 
-const nowView = readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'NowView.tsx'),
-  'utf8',
-)
+const here = path.dirname(fileURLToPath(import.meta.url))
+const nowView = readFileSync(path.join(here, 'NowView.tsx'), 'utf8')
+const reminderList = readFileSync(path.join(here, 'ReminderList.tsx'), 'utf8')
 const headingIds = [
   ...nowView.matchAll(/id="(now-(?:habits|tasks|reminders)-title)"/g),
 ].map((match) => match[1])
@@ -40,17 +43,18 @@ assert.deepEqual(headingIds, [
 ])
 assert.match(nowView, /aria-label=\{nowCopy\.addReminder\}/)
 assert.match(nowView, /\{nowCopy\.addReminderShort\}/)
-assert.match(nowView, /nowCopy\.editReminder/)
-assert.match(nowView, /nowCopy\.dragReminder/)
-assert.match(nowView, /now-reminder-editor-row/)
-assert.match(nowView, /setTimeout/)
-assert.match(nowView, /document\.activeElement/)
-assert.doesNotMatch(
-  nowView.slice(nowView.indexOf('function SortableReminderRow')),
-  /TimeControl/,
-)
 assert.match(nowView, /nowPageCache/)
 assert.match(nowView, /rememberNowPage/)
 assert.match(nowView, /const soft = nowPageCache/)
+assert.match(nowView, /NowPulse/)
+assert.match(nowView, /ReminderWhen/)
+assert.doesNotMatch(nowView, /type="time"/)
+assert.match(reminderList, /nowCopy\.editReminder/)
+assert.match(reminderList, /nowCopy\.dragReminder/)
+assert.match(reminderList, /now-reminder-editor-row/)
+assert.match(reminderList, /setTimeout/)
+assert.match(reminderList, /document\.activeElement/)
+assert.doesNotMatch(reminderList, /TimeControl/)
+assert.doesNotMatch(reminderList, /type="time"/)
 
 console.log('now-copy.test.ts: ok')

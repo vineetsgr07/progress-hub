@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import {
+  groupReminderInbox,
   isPendingReminder,
   mapReminder,
+  openRemindersDueOnDate,
+  overdueOpenCount,
   parseDueTime,
   pendingRemindersForDate,
+  remindersDueOnDate,
   sortReminders,
 } from './reminders.ts'
 
@@ -63,6 +67,39 @@ assert.deepEqual(
   pending.map((r) => r.id),
   ['overdue', 'today'],
 )
+
+const dueOn = remindersDueOnDate(
+  [
+    { ...base, id: 'today', dueDate: '2026-08-17', done: false },
+    { ...base, id: 'today-done', dueDate: '2026-08-17', done: true, position: 1 },
+    { ...base, id: 'future', dueDate: '2026-08-20', done: false, position: 2 },
+    { ...base, id: 'overdue', dueDate: '2026-08-10', done: false, position: 3 },
+  ],
+  '2026-08-17',
+)
+assert.deepEqual(
+  dueOn.map((r) => r.id),
+  ['today', 'today-done'],
+)
+assert.deepEqual(
+  openRemindersDueOnDate(dueOn, '2026-08-17').map((r) => r.id),
+  ['today'],
+)
+assert.equal(overdueOpenCount(dueOn.concat([{ ...base, id: 'overdue', dueDate: '2026-08-10', done: false }]), '2026-08-17'), 1)
+
+const inbox = groupReminderInbox(
+  [
+    { ...base, id: 'today', dueDate: '2026-08-17', done: false },
+    { ...base, id: 'future', dueDate: '2026-08-20', done: false, position: 1 },
+    { ...base, id: 'done', dueDate: '2026-08-10', done: true, position: 2 },
+    { ...base, id: 'overdue', dueDate: '2026-08-10', done: false, position: 3 },
+  ],
+  '2026-08-17',
+)
+assert.deepEqual(inbox.overdue.map((r) => r.id), ['overdue'])
+assert.deepEqual(inbox.today.map((r) => r.id), ['today'])
+assert.deepEqual(inbox.later.map((r) => r.id), ['future'])
+assert.deepEqual(inbox.done.map((r) => r.id), ['done'])
 
 const mapped = mapReminder({
   id: 'x',

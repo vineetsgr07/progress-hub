@@ -2849,6 +2849,7 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .week-bar-fill,
   .week-ring-fill,
+  .now-pulse-meter-fill,
   .habits-panel-meter-fill,
   .habits-overview-ring-fill,
   .habits-daily-bar-fill,
@@ -7338,6 +7339,17 @@ button.task-title-open:hover .subtask-chip-add {
   top: 0;
 }
 
+.now-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.now-main {
+  min-width: 0;
+}
+
 .now-view {
   display: flex;
   flex-direction: column;
@@ -7348,6 +7360,162 @@ button.task-title-open:hover .subtask-chip-add {
   margin-inline: auto;
   padding: 8px 0 32px;
   overflow-x: clip;
+}
+
+.now-pulse {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.now-pulse-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.now-pulse-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.now-pulse-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.now-pulse-summary {
+  min-width: 0;
+}
+
+.now-pulse-summary strong {
+  display: block;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.now-pulse-empty,
+.now-pulse-done {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.now-pulse-done {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.now-pulse-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.now-pulse-meter {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.now-pulse-meter-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.now-pulse-meter-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.now-pulse-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width var(--motion-base) var(--motion-ease);
+}
+
+.now-pulse-meter-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+
+.now-pulse-overdue {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--danger-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.now-pulse-overdue:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.reminder-when-chip {
+  flex: 0 0 auto;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reminder-when-chip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.reminder-when-chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.reminder-when-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reminder-when-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminders-view {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 640px;
+  padding: 8px 0 32px;
+}
+
+.reminders-view-title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
 }
 
 .now-view > .skeleton {
@@ -8026,6 +8194,17 @@ button.task-title-open:hover .subtask-chip-add {
 
   .hub-body {
     padding: 10px 10px max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .now-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .now-side {
+    order: -1;
+    position: static;
+    max-height: none;
   }
 
   .now-view {
