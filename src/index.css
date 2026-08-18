@@ -7419,8 +7419,17 @@ button.task-title-open:hover .subtask-chip-add {
   overflow-wrap: anywhere;
 }
 
+.now-reminder-editor-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
 .now-reminder-editor {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .now-item.is-sortable:hover .subtask-drag-handle,
@@ -7487,17 +7496,26 @@ button.task-title-open:hover .subtask-chip-add {
 }
 
 .now-reminder-time {
-  flex: 0 0 7.5rem;
-  max-width: 7.5rem;
+  flex: 0 0 6.25rem;
+  width: 6.25rem;
+  max-width: 6.25rem;
   min-width: 0;
-  height: 30px;
+  height: 28px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--ink);
-  padding: 0 8px;
+  padding: 0 10px;
   font: inherit;
   font-size: 13px;
+  cursor: pointer;
+}
+
+.now-reminder-time::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  width: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .empty {
@@ -9998,9 +10016,14 @@ select.badge.status {
     min-width: 0;
   }
 
+  .now-reminder-editor-row {
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
   .now-reminder-time {
-    flex: 0 0 7.5rem;
-    max-width: 7.5rem;
+    flex: 0 0 6.25rem;
+    max-width: 6.25rem;
   }
 
   .now-reminder-add .mantine-Button-root {

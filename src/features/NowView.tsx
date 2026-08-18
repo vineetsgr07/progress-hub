@@ -835,7 +835,16 @@ function SortableReminderRow({
   const [titleDraft, setTitleDraft] = useState(reminder.title)
   const [timeDraft, setTimeDraft] = useState(reminder.dueTime ?? '')
   const skipBlur = useRef(false)
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const meta = reminderMeta(reminder, viewDate)
+
+  function clearBlurTimer() {
+    if (blurTimer.current == null) return
+    clearTimeout(blurTimer.current)
+    blurTimer.current = null
+  }
+
+  useEffect(() => () => clearBlurTimer(), [])
 
   function beginEdit() {
     setTitleDraft(reminder.title)
@@ -844,6 +853,7 @@ function SortableReminderRow({
   }
 
   function save() {
+    clearBlurTimer()
     const title = titleDraft.trim()
     const dueTime = timeDraft || null
     setEditing(false)
@@ -859,7 +869,17 @@ function SortableReminderRow({
     }
     const next = e.relatedTarget as HTMLElement | null
     if (next?.closest('.now-reminder')) return
-    save()
+    clearBlurTimer()
+    blurTimer.current = setTimeout(() => {
+      blurTimer.current = null
+      if (skipBlur.current) {
+        skipBlur.current = false
+        return
+      }
+      const active = document.activeElement as HTMLElement | null
+      if (active?.closest('.now-reminder')) return
+      save()
+    }, 0)
   }
 
   return (
@@ -894,7 +914,7 @@ function SortableReminderRow({
       />
       <div className="now-item-body">
         {editing ? (
-          <>
+          <div className="now-reminder-editor-row">
             <Textarea
               className="now-reminder-editor"
               autosize
@@ -911,6 +931,7 @@ function SortableReminderRow({
                 if (e.key === 'Escape') {
                   e.preventDefault()
                   skipBlur.current = true
+                  clearBlurTimer()
                   setEditing(false)
                   return
                 }
@@ -931,7 +952,7 @@ function SortableReminderRow({
               onChange={(e) => setTimeDraft(e.currentTarget.value)}
               onBlur={onEditorBlur}
             />
-          </>
+          </div>
         ) : (
           <>
             <button

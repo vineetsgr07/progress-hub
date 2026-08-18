@@ -42,6 +42,13 @@ assert.match(nowView, /aria-label=\{nowCopy\.addReminder\}/)
 assert.match(nowView, /\{nowCopy\.addReminderShort\}/)
 assert.match(nowView, /nowCopy\.editReminder/)
 assert.match(nowView, /nowCopy\.dragReminder/)
+assert.match(nowView, /now-reminder-editor-row/)
+assert.match(nowView, /setTimeout/)
+assert.match(nowView, /document\.activeElement/)
+assert.doesNotMatch(
+  nowView.slice(nowView.indexOf('function SortableReminderRow')),
+  /TimeControl/,
+)
 assert.match(nowView, /nowPageCache/)
 assert.match(nowView, /rememberNowPage/)
 assert.match(nowView, /const soft = nowPageCache/)

@@ -292,6 +292,26 @@ assert.match(
   /\.now-reminder-add\s*\{[^}]*flex-wrap:\s*nowrap/,
   'phone reminder composer does not wrap onto a second line',
 )
+assert.match(
+  css,
+  /\.now-reminder-editor-row\s*\{[^}]*flex-wrap:\s*nowrap/,
+  'reminder edit title and time stay on one line',
+)
+assert.match(
+  phoneNow,
+  /\.now-reminder-editor-row\s*\{[^}]*flex-wrap:\s*nowrap/,
+  'phone reminder edit stays on one line',
+)
+assert.match(
+  css,
+  /\.now-reminder-time::-webkit-calendar-picker-indicator\s*\{[^}]*opacity:\s*0/,
+  'native time chip hides the square calendar button',
+)
+assert.match(
+  phoneNow,
+  /\.now-reminder-time\s*\{[^}]*6\.25rem/,
+  'phone reminder time chip stays compact',
+)
 
 const viewport = html.match(/<meta name="viewport"[^>]*>/)?.[0] ?? ''
 assert.match(viewport, /width=device-width/, 'viewport is device-width')
