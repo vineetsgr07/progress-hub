@@ -22,6 +22,8 @@ assert.equal(nowCopy.pin, 'Pin to Now')
 assert.equal(nowCopy.openTask('Write brief'), 'Open “Write brief”')
 assert.doesNotMatch(nowCopy.loadError, /\/api|SQL|stack/i)
 assert.equal(nowCopy.dragAria('Write brief'), 'Drag to reorder Write brief')
+assert.equal(nowCopy.dragReminder('Call'), 'Drag to reorder Call')
+assert.equal(nowCopy.editReminder, 'Edit reminder')
 assert.doesNotMatch(nowCopy.reorderFailed, /\/api|SQL|stack/i)
 
 const nowView = readFileSync(
@@ -38,5 +40,10 @@ assert.deepEqual(headingIds, [
 ])
 assert.match(nowView, /aria-label=\{nowCopy\.addReminder\}/)
 assert.match(nowView, /\{nowCopy\.addReminderShort\}/)
+assert.match(nowView, /nowCopy\.editReminder/)
+assert.match(nowView, /nowCopy\.dragReminder/)
+assert.match(nowView, /nowPageCache/)
+assert.match(nowView, /rememberNowPage/)
+assert.match(nowView, /const soft = nowPageCache/)
 
 console.log('now-copy.test.ts: ok')

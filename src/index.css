@@ -7405,6 +7405,24 @@ button.task-title-open:hover .subtask-chip-add {
   touch-action: pan-y;
 }
 
+.now-item .mantine-Checkbox-root {
+  padding-top: 4px;
+}
+
+.now-item .list-drag-handle,
+.now-item .subtask-drag-handle {
+  margin-top: 4px;
+}
+
+.now-reminder .now-item-title {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.now-reminder-editor {
+  width: 100%;
+}
+
 .now-item.is-sortable:hover .subtask-drag-handle,
 .now-item.is-sortable:focus-within .subtask-drag-handle {
   opacity: 1;

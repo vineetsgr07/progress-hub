@@ -47,7 +47,7 @@ const sorted = sortReminders([
 ])
 assert.deepEqual(
   sorted.map((r) => r.id),
-  ['earlier', 'later', 'untimed'],
+  ['untimed', 'later', 'earlier'],
 )
 
 const pending = pendingRemindersForDate(
@@ -76,5 +76,17 @@ const mapped = mapReminder({
 })
 assert.equal(mapped.dueTime, '08:00')
 assert.equal(mapped.done, false)
+
+const withBreaks = mapReminder({
+  id: 'n',
+  title: 'Line one\nLine two',
+  due_date: '2026-08-17',
+  due_time: null,
+  done: 0,
+  position: 0,
+  created_at: 'a',
+  updated_at: 'b',
+})
+assert.equal(withBreaks.title, 'Line one\nLine two')
 
 console.log('reminders.test.ts: ok')

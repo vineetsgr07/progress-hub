@@ -29,9 +29,12 @@ export const nowCopy = {
   markDone: 'Mark done',
   markNotDone: 'Mark not done',
   deleteReminder: 'Remove reminder',
+  editReminder: 'Edit reminder',
   reminderFailed: 'Couldn’t save that reminder. Try again.',
   reminderDeleted: 'Reminder removed',
   dragAria: (title: string) =>
     `Drag to reorder ${title || 'checklist item'}`,
+  dragReminder: (title: string) =>
+    `Drag to reorder ${title || 'reminder'}`,
   reorderFailed: 'Couldn’t save that order. Try again.',
 } as const

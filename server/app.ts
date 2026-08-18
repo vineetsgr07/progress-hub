@@ -309,17 +309,16 @@ async function loadNowPage(date: string) {
     .all()) as Array<{ id: string; task_id: string }>
 
   const taskIds = [...new Set(pinnedRows.map((row) => String(row.task_id)))]
-  const tasksById = new Map<string, Awaited<ReturnType<typeof mapTask>>>()
-  for (const taskId of taskIds) {
-    const row = (await db
-      .prepare('SELECT * FROM tasks WHERE id = ?')
-      .get(taskId)) as Record<string, unknown> | undefined
-    if (!row) continue
-    const entry = (await db
-      .prepare(`SELECT * FROM day_entries WHERE task_id = ? AND date = ?`)
-      .get(taskId, date)) as Record<string, unknown> | undefined
-    tasksById.set(taskId, await mapTask(row, entry ?? null, date))
-  }
+  const taskRows =
+    taskIds.length === 0
+      ? []
+      : ((await db
+          .prepare(
+            `SELECT * FROM tasks WHERE id IN (${taskIds.map(() => '?').join(',')})`,
+          )
+          .all(...taskIds)) as Record<string, unknown>[])
+  const mapped = await mapTasks(taskRows, date)
+  const tasksById = new Map(mapped.map((task) => [String(task.id), task]))
 
   const items = []
   for (const pin of pinnedRows) {
@@ -338,10 +337,10 @@ async function loadNowPage(date: string) {
     })
   }
 
-  const reminderRows = (await db
-    .prepare(`SELECT * FROM reminders`)
-    .all()) as Array<Record<string, unknown>>
-  const habitsPage = await loadHabits(date)
+  const [reminderRows, habitsPage] = await Promise.all([
+    db.prepare(`SELECT * FROM reminders`).all(),
+    loadHabits(date),
+  ])
   return {
     date,
     items,
@@ -1200,6 +1199,30 @@ app.post('/api/reminders', async (req, res) => {
       >,
     ),
   )
+})
+
+app.patch('/api/reminders/reorder', async (req, res) => {
+  const orderedIds = req.body?.orderedIds as string[]
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    res.status(400).json({ error: 'orderedIds required' })
+    return
+  }
+  const unique = [...new Set(orderedIds.map(String))]
+  if (unique.length !== orderedIds.length) {
+    res.status(400).json({ error: 'orderedIds must be unique' })
+    return
+  }
+  const now = new Date().toISOString()
+  const update = await db.prepare(
+    `UPDATE reminders SET position = ?, updated_at = ? WHERE id = ?`,
+  )
+  const tx = db.transaction(async () => {
+    for (const [index, id] of unique.entries()) {
+      await update.run(index, now, id)
+    }
+  })
+  await tx()
+  res.json({ ok: true, count: unique.length })
 })
 
 app.patch('/api/reminders/:id', async (req, res) => {

@@ -266,6 +266,13 @@ export const api = {
     return request<void>(`/api/reminders/${id}`, { method: 'DELETE' })
   },
 
+  reorderReminders(orderedIds: string[]) {
+    return request<{ ok: boolean; count: number }>('/api/reminders/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
+    })
+  },
+
   deleteSubtask(id: string) {
     return request<void>(`/api/subtasks/${id}`, { method: 'DELETE' })
   },

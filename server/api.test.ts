@@ -1559,6 +1559,8 @@ try {
       dueDate: date,
     })
     assert.equal(remToday.status, 201)
+    const remTodayId = (remToday.json as { id: string }).id
+    const remOverdueId = (remOverdue.json as { id: string }).id
     const remFuture = await req('POST', '/api/reminders', {
       title: 'Later',
       dueDate: '2026-12-01',
@@ -1586,12 +1588,43 @@ try {
       nowBody.reminders.map((r) => r.title),
       ['Overdue call', 'Today note'],
     )
+
+    const renamed = await req('PATCH', `/api/reminders/${remTodayId}`, {
+      title: 'Line one\nLine two',
+    })
+    assert.equal(renamed.status, 200)
+    assert.equal((renamed.json as { title: string }).title, 'Line one\nLine two')
+
+    const badRemReorder = await req('PATCH', '/api/reminders/reorder', {
+      orderedIds: [],
+    })
+    assert.equal(badRemReorder.status, 400)
+
+    const remReorder = await req('PATCH', '/api/reminders/reorder', {
+      orderedIds: [remTodayId, remOverdueId],
+    })
+    assert.equal(remReorder.status, 200)
+    const nowAfterRemReorder = await req('GET', `/api/now?date=${date}`)
+    assert.deepEqual(
+      (nowAfterRemReorder.json as { reminders: Array<{ id: string; title: string }> }).reminders.map(
+        (r) => r.id,
+      ),
+      [remTodayId, remOverdueId],
+    )
+    assert.equal(
+      (
+        nowAfterRemReorder.json as {
+          reminders: Array<{ id: string; title: string }>
+        }
+      ).reminders.find((r) => r.id === remTodayId)?.title,
+      'Line one\nLine two',
+    )
     const nextDay = await req('GET', '/api/now?date=2026-08-07')
     assert.equal(nextDay.status, 200)
     const nextReminders = (
       nextDay.json as { reminders: Array<{ title: string }> }
     ).reminders.map((r) => r.title)
-    assert.ok(nextReminders.includes('Today note'))
+    assert.ok(nextReminders.includes('Line one\nLine two'))
     assert.ok(nextReminders.includes('Overdue call'))
     const water = nowBody.habits.find((h) => h.id === nowHabitId)
     assert.ok(water)
@@ -1685,7 +1718,7 @@ try {
       reminders: Array<{ title: string }>
     }
     assert.ok(backup.subtasks.some((s) => Number(s.pinned) === 1))
-    assert.ok(backup.reminders.some((r) => r.title === 'Today note'))
+    assert.ok(backup.reminders.some((r) => r.title === 'Line one\nLine two'))
   }
 
   console.log('api tests passed')

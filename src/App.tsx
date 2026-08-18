@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   ActionIcon,
@@ -16,20 +16,34 @@ import {
 import { useMediaQuery } from '@mantine/hooks'
 import { IconDotsVertical, IconMoon, IconSun } from '@tabler/icons-react'
 import { api } from './api'
-import { KanbanBoard } from './features/KanbanBoard'
 import { SortableTaskList } from './features/SortableTaskList'
-import { AnalyticsView } from './features/AnalyticsView'
 import { ProgressPanel } from './features/ProgressPanel'
 import { HistoryPanel } from './features/HistoryPanel'
 import { TaskModal, type TaskDraft } from './features/TaskModal'
-import { NotesDrawer, type DetailMetaPatch } from './features/NotesDrawer'
+import type { DetailMetaPatch } from './features/NotesDrawer'
 import { NotesPanel } from './features/NotesPanel'
-import { NotesView } from './features/NotesView'
 import { TagsPanel } from './features/TagsPanel'
 import { DaySnapshot } from './features/DaySnapshot'
-import { TaskDetailPanel } from './features/TaskDetailPanel'
 import { HabitsPanel } from './features/HabitsPanel'
-import { MapsView } from './features/MapsView'
+
+const KanbanBoard = lazy(() =>
+  import('./features/KanbanBoard').then((m) => ({ default: m.KanbanBoard })),
+)
+const AnalyticsView = lazy(() =>
+  import('./features/AnalyticsView').then((m) => ({ default: m.AnalyticsView })),
+)
+const NotesDrawer = lazy(() =>
+  import('./features/NotesDrawer').then((m) => ({ default: m.NotesDrawer })),
+)
+const NotesView = lazy(() =>
+  import('./features/NotesView').then((m) => ({ default: m.NotesView })),
+)
+const MapsView = lazy(() =>
+  import('./features/MapsView').then((m) => ({ default: m.MapsView })),
+)
+const TaskDetailPanel = lazy(() =>
+  import('./features/TaskDetailPanel').then((m) => ({ default: m.TaskDetailPanel })),
+)
 import { ProjectsBoard } from './features/ProjectsBoard'
 import {
   readProjectsNotesOpen,
@@ -57,7 +71,7 @@ import { ViewStage } from './features/ViewStage'
 import { SignInScreen } from './features/SignInScreen'
 import { authCopy } from './features/auth-copy'
 import { getSupabase, supabaseAuthEnabled } from './supabase'
-import { mergeTask, mergeSubtask, appendSubtask, insertSubtaskAfter, removeSubtask, patchSubtaskLocal, settleRunningSubtaskTimer } from './features/task-merge'
+import { mergeTask, mergeSubtask, appendSubtask, insertSubtaskAfter, removeSubtask, patchSubtaskLocal, settleRunningSubtaskTimer, ensureTaskPresent } from './features/task-merge'
 import { unlockFocusAudio } from './features/focus-signal'
 import type {
   Category,
@@ -74,6 +88,15 @@ import {
   localISODate,
   shiftISODate,
 } from './utils/date'
+
+function LazyFallback() {
+  return (
+    <>
+      <div className="skeleton" />
+      <div className="skeleton" />
+    </>
+  )
+}
 
 const CATEGORIES_FALLBACK: Category[] = [
   'All',
@@ -863,13 +886,10 @@ export default function App() {
               date={date}
               tick={tick}
               busy={busy}
+              tasks={tasks}
               onOpenTask={openTask}
               onEnsureTask={(task) => {
-                setTasks((prev) =>
-                  prev.some((t) => t.id === task.id)
-                    ? mergeTask(prev, task)
-                    : [...prev, task],
-                )
+                setTasks((prev) => ensureTaskPresent(prev, task))
               }}
               onToggleItem={(taskId, sid, doneVal) =>
                 toggleSubtaskFor(taskId, sid, doneVal)
@@ -1126,48 +1146,56 @@ export default function App() {
           )}
 
           {tab === 'board' && (
-            <KanbanBoard
-              date={date}
-              busy={busy}
-              onToast={flash}
-              onError={setError}
-              onOpenNotes={openTask}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <KanbanBoard
+                date={date}
+                busy={busy}
+                onToast={flash}
+                onError={setError}
+                onOpenNotes={openTask}
+              />
+            </Suspense>
           )}
 
           {tab === 'maps' && (
-            <MapsView
-              onError={setError}
-              onToast={flash}
-              onEditingChange={setMapsEditing}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <MapsView
+                onError={setError}
+                onToast={flash}
+                onEditingChange={setMapsEditing}
+              />
+            </Suspense>
           )}
 
           {tab === 'analytics' && (
-            <AnalyticsView
-              stats={stats}
-              habitsProgress={habitsProgress}
-              loading={analyticsLoading}
-              date={date}
-              preferHabitDetail={analyticsHabitDetail}
-              onSelectDate={(d) => {
-                setDate(d)
-                setTab('today')
-              }}
-              onGoToday={() => setTab('today')}
-              onOpenTaskId={openAnalyticsTask}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <AnalyticsView
+                stats={stats}
+                habitsProgress={habitsProgress}
+                loading={analyticsLoading}
+                date={date}
+                preferHabitDetail={analyticsHabitDetail}
+                onSelectDate={(d) => {
+                  setDate(d)
+                  setTab('today')
+                }}
+                onGoToday={() => setTab('today')}
+                onOpenTaskId={openAnalyticsTask}
+              />
+            </Suspense>
           )}
 
           {tab === 'notes' && (
-            <NotesView
-              version={notesVersion}
-              busy={busy}
-              onOpen={openNoteSubject}
-              onChanged={bumpNotesVersion}
-              onError={setError}
-              onToast={flash}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <NotesView
+                version={notesVersion}
+                busy={busy}
+                onOpen={openNoteSubject}
+                onChanged={bumpNotesVersion}
+                onError={setError}
+                onToast={flash}
+              />
+            </Suspense>
           )}
 
           {tab === 'history' && (
@@ -1296,6 +1324,7 @@ export default function App() {
       )}
 
       {notesSubject?.source === 'task' && (
+        <Suspense fallback={<LazyFallback />}>
         <TaskDetailPanel
           taskId={notesSubject.id}
           title={notesSubject.title}
@@ -1380,9 +1409,11 @@ export default function App() {
             togglePinFor(notesSubject.id, sid, pinned)
           }
         />
+        </Suspense>
       )}
 
       {notesSubject && notesSubject.source === 'note' && (
+        <Suspense fallback={<LazyFallback />}>
         <NotesDrawer
           subject={notesSubject}
           width={notesDrawerWidth}
@@ -1441,6 +1472,7 @@ export default function App() {
             }
           }}
         />
+        </Suspense>
       )}
 
       <TagsPanel

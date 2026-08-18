@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ActionIcon, Button, Checkbox, TextInput } from '@mantine/core'
+import { ActionIcon, Button, Checkbox, Textarea, TextInput } from '@mantine/core'
 import { IconGripVertical, IconPin, IconX } from '@tabler/icons-react'
 import { api } from '../api'
 import type { Habit, NowPage, PinnedChecklistItem, Reminder, Task } from '../types'
@@ -31,15 +31,23 @@ import {
 } from './drag-sensors'
 import { habitsCopy } from './habits-copy'
 import { nowCopy } from './now-copy'
+import { overlayNowItems } from './task-merge'
 import { TimeControl } from './TimeControl'
 import { subtaskDisplayHtml, subtaskPlainText } from './subtask-html'
 
 const ICON = { size: 14, stroke: 1.5 } as const
 
+let nowPageCache: { date: string; page: NowPage } | null = null
+
+function rememberNowPage(next: NowPage) {
+  nowPageCache = { date: next.date, page: next }
+}
+
 type Props = {
   date: string
   tick: number
   busy?: boolean
+  tasks: Task[]
   onOpenTask: (task: Task) => void
   onEnsureTask: (task: Task) => void
   onToggleItem: (taskId: string, id: string, done: boolean) => void
@@ -57,6 +65,7 @@ export function NowView({
   date,
   tick,
   busy,
+  tasks,
   onOpenTask,
   onEnsureTask,
   onToggleItem,
@@ -65,8 +74,12 @@ export function NowView({
   onError,
   onToast,
 }: Props) {
-  const [page, setPage] = useState<NowPage | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState<NowPage | null>(() =>
+    nowPageCache?.date === date ? nowPageCache.page : null,
+  )
+  const [loading, setLoading] = useState(
+    !(nowPageCache?.date === date && nowPageCache.page),
+  )
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [draftTime, setDraftTime] = useState('')
@@ -76,10 +89,12 @@ export function NowView({
   async function load() {
     const id = ++requestId.current
     setError(null)
-    setLoading(true)
+    const soft = nowPageCache?.date === date && nowPageCache.page != null
+    if (!soft) setLoading(true)
     try {
       const next = await api.getNow(date)
       if (id !== requestId.current) return
+      rememberNowPage(next)
       setPage(next)
     } catch {
       if (id !== requestId.current) return
@@ -95,6 +110,11 @@ export function NowView({
 
   useEffect(() => {
     setShowDoneHabits(false)
+    if (nowPageCache?.date === date && nowPageCache.page) {
+      setPage(nowPageCache.page)
+    } else {
+      setPage(null)
+    }
     void load()
   }, [date])
 
@@ -119,7 +139,7 @@ export function NowView({
     }
   }
 
-  const items = page?.items ?? []
+  const items = overlayNowItems(page?.items ?? [], tasks)
   const reminders = page?.reminders ?? []
   const habits = page?.habits ?? []
   const openHabits = habits.filter((h) => !h.completed)
@@ -188,57 +208,16 @@ export function NowView({
           <p className="now-empty">{nowCopy.emptyHabits}</p>
         ) : null}
         {visibleHabits.length > 0 ? (
-          <ul className="now-list">
-            {visibleHabits.map((habit) => (
-              <HabitRow
-                key={habit.id}
-                habit={habit}
-                busy={busy}
-                onToggle={async () => {
-                  const next = !habit.completed
-                  setPage((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          habits: prev.habits.map((h) =>
-                            h.id === habit.id ? { ...h, completed: next } : h,
-                          ),
-                        }
-                      : prev,
-                  )
-                  try {
-                    const updated = await api.setHabitEntry(
-                      habit.id,
-                      date,
-                      next,
-                    )
-                    setPage((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            habits: prev.habits.map((h) =>
-                              h.id === habit.id ? updated : h,
-                            ),
-                          }
-                        : prev,
-                    )
-                  } catch {
-                    setPage((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            habits: prev.habits.map((h) =>
-                              h.id === habit.id ? habit : h,
-                            ),
-                          }
-                        : prev,
-                    )
-                    onError?.(habitsCopy.error)
-                  }
-                }}
-              />
-            ))}
-          </ul>
+          <NowHabitList
+            habits={habits}
+            visibleHabits={visibleHabits}
+            doneHabits={doneHabits}
+            showDoneHabits={showDoneHabits}
+            busy={busy}
+            date={date}
+            onError={onError}
+            setPage={setPage}
+          />
         ) : null}
         {doneHabits.length > 0 ? (
           <button
@@ -265,53 +244,14 @@ export function NowView({
           <p className="now-empty">{nowCopy.emptyReminders}</p>
         ) : null}
         {reminders.length > 0 ? (
-          <ul className="now-list">
-            {reminders.map((reminder) => (
-              <ReminderRow
-                key={reminder.id}
-                reminder={reminder}
-                viewDate={date}
-                busy={busy}
-                onToggle={async (done) => {
-                  try {
-                    const updated = await api.updateReminder(reminder.id, { done })
-                    setPage((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            reminders: done
-                              ? prev.reminders.filter((r) => r.id !== reminder.id)
-                              : prev.reminders.map((r) =>
-                                  r.id === reminder.id ? updated : r,
-                                ),
-                          }
-                        : prev,
-                    )
-                  } catch {
-                    onError?.(nowCopy.reminderFailed)
-                  }
-                }}
-                onDelete={async () => {
-                  try {
-                    await api.deleteReminder(reminder.id)
-                    setPage((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            reminders: prev.reminders.filter(
-                              (r) => r.id !== reminder.id,
-                            ),
-                          }
-                        : prev,
-                    )
-                    onToast?.(nowCopy.reminderDeleted)
-                  } catch {
-                    onError?.(nowCopy.reminderFailed)
-                  }
-                }}
-              />
-            ))}
-          </ul>
+          <NowReminderList
+            reminders={reminders}
+            viewDate={date}
+            busy={busy}
+            onError={onError}
+            onToast={onToast}
+            setPage={setPage}
+          />
         ) : null}
         <div className="now-reminder-add">
           <TextInput
@@ -575,7 +515,117 @@ function SortableNowItem({
   )
 }
 
-function HabitRow({
+function useNowSensors() {
+  return useSensors(
+    useSensor(TaskMouseSensor, TASK_MOUSE_SENSOR_OPTIONS),
+    useSensor(TaskTouchSensor, TASK_TOUCH_SENSOR_OPTIONS),
+  )
+}
+
+function NowHabitList({
+  habits,
+  visibleHabits,
+  doneHabits,
+  showDoneHabits,
+  busy,
+  date,
+  onError,
+  setPage,
+}: {
+  habits: Habit[]
+  visibleHabits: Habit[]
+  doneHabits: Habit[]
+  showDoneHabits: boolean
+  busy?: boolean
+  date: string
+  onError?: (message: string) => void
+  setPage: Dispatch<SetStateAction<NowPage | null>>
+}) {
+  const sensors = useNowSensors()
+
+  async function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = visibleHabits.findIndex((h) => h.id === active.id)
+    const newIndex = visibleHabits.findIndex((h) => h.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const reorderedVisible = arrayMove(visibleHabits, oldIndex, newIndex)
+    const persist = showDoneHabits
+      ? reorderedVisible
+      : [...reorderedVisible, ...doneHabits]
+    const next = persist.map((h, index) => ({ ...h, sortOrder: index }))
+    setPage((prev) => (prev ? { ...prev, habits: next } : prev))
+    try {
+      await api.reorderHabits(next.map((h) => h.id))
+    } catch {
+      setPage((prev) => (prev ? { ...prev, habits } : prev))
+      onError?.(nowCopy.reorderFailed)
+    }
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={(e) => void onDragEnd(e)}
+    >
+      <SortableContext
+        items={visibleHabits.map((h) => h.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <ul className="now-list">
+          {visibleHabits.map((habit) => (
+            <SortableHabitRow
+              key={habit.id}
+              habit={habit}
+              busy={busy}
+              onToggle={async () => {
+                const next = !habit.completed
+                setPage((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        habits: prev.habits.map((h) =>
+                          h.id === habit.id ? { ...h, completed: next } : h,
+                        ),
+                      }
+                    : prev,
+                )
+                try {
+                  const updated = await api.setHabitEntry(habit.id, date, next)
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          habits: prev.habits.map((h) =>
+                            h.id === habit.id ? updated : h,
+                          ),
+                        }
+                      : prev,
+                  )
+                } catch {
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          habits: prev.habits.map((h) =>
+                            h.id === habit.id ? habit : h,
+                          ),
+                        }
+                      : prev,
+                  )
+                  onError?.(habitsCopy.error)
+                }
+              }}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function SortableHabitRow({
   habit,
   busy,
   onToggle,
@@ -584,12 +634,31 @@ function HabitRow({
   busy?: boolean
   onToggle: () => void
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: habit.id })
   return (
-    <li className={`now-item${habit.completed ? ' is-done' : ''}`}>
+    <li
+      ref={setNodeRef}
+      className={`now-item is-sortable${habit.completed ? ' is-done' : ''}${isDragging ? ' is-dragging' : ''}`}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      {...attributes}
+      {...listeners}
+      role="group"
+      aria-roledescription="sortable"
+      aria-label={habitsCopy.dragAria(habit.title)}
+    >
+      <span className="list-drag-handle subtask-drag-handle" aria-hidden>
+        <IconGripVertical {...ICON} aria-hidden />
+      </span>
       <Checkbox
         size="xs"
         checked={habit.completed}
         disabled={busy}
+        data-no-dnd
         aria-label={habitsCopy.toggleAria(habit.title, habit.completed)}
         onChange={onToggle}
       />
@@ -597,6 +666,142 @@ function HabitRow({
         <span className="now-item-title">{habit.title}</span>
       </div>
     </li>
+  )
+}
+
+function NowReminderList({
+  reminders,
+  viewDate,
+  busy,
+  onError,
+  onToast,
+  setPage,
+}: {
+  reminders: Reminder[]
+  viewDate: string
+  busy?: boolean
+  onError?: (message: string) => void
+  onToast?: (message: string) => void
+  setPage: Dispatch<SetStateAction<NowPage | null>>
+}) {
+  const sensors = useNowSensors()
+
+  async function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = reminders.findIndex((r) => r.id === active.id)
+    const newIndex = reminders.findIndex((r) => r.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const next = arrayMove(reminders, oldIndex, newIndex).map((r, index) => ({
+      ...r,
+      position: index,
+    }))
+    setPage((prev) => (prev ? { ...prev, reminders: next } : prev))
+    try {
+      await api.reorderReminders(next.map((r) => r.id))
+    } catch {
+      setPage((prev) => (prev ? { ...prev, reminders } : prev))
+      onError?.(nowCopy.reorderFailed)
+    }
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={(e) => void onDragEnd(e)}
+    >
+      <SortableContext
+        items={reminders.map((r) => r.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <ul className="now-list">
+          {reminders.map((reminder) => (
+            <SortableReminderRow
+              key={reminder.id}
+              reminder={reminder}
+              viewDate={viewDate}
+              busy={busy}
+              onToggle={async (done) => {
+                try {
+                  const updated = await api.updateReminder(reminder.id, { done })
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          reminders: done
+                            ? prev.reminders.filter((r) => r.id !== reminder.id)
+                            : prev.reminders.map((r) =>
+                                r.id === reminder.id ? updated : r,
+                              ),
+                        }
+                      : prev,
+                  )
+                } catch {
+                  onError?.(nowCopy.reminderFailed)
+                }
+              }}
+              onSave={async (patch) => {
+                const previous = reminder
+                setPage((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        reminders: prev.reminders.map((r) =>
+                          r.id === reminder.id ? { ...r, ...patch } : r,
+                        ),
+                      }
+                    : prev,
+                )
+                try {
+                  const updated = await api.updateReminder(reminder.id, patch)
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          reminders: prev.reminders.map((r) =>
+                            r.id === reminder.id ? updated : r,
+                          ),
+                        }
+                      : prev,
+                  )
+                } catch {
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          reminders: prev.reminders.map((r) =>
+                            r.id === reminder.id ? previous : r,
+                          ),
+                        }
+                      : prev,
+                  )
+                  onError?.(nowCopy.reminderFailed)
+                }
+              }}
+              onDelete={async () => {
+                try {
+                  await api.deleteReminder(reminder.id)
+                  setPage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          reminders: prev.reminders.filter(
+                            (r) => r.id !== reminder.id,
+                          ),
+                        }
+                      : prev,
+                  )
+                  onToast?.(nowCopy.reminderDeleted)
+                } catch {
+                  onError?.(nowCopy.reminderFailed)
+                }
+              }}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
   )
 }
 
@@ -609,26 +814,77 @@ function reminderMeta(reminder: Reminder, viewDate: string) {
   return reminder.dueTime
 }
 
-function ReminderRow({
+function SortableReminderRow({
   reminder,
   viewDate,
   busy,
   onToggle,
+  onSave,
   onDelete,
 }: {
   reminder: Reminder
   viewDate: string
   busy?: boolean
   onToggle: (done: boolean) => void
+  onSave: (patch: { title: string; dueTime: string | null }) => void
   onDelete: () => void
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: reminder.id })
+  const [editing, setEditing] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(reminder.title)
+  const [timeDraft, setTimeDraft] = useState(reminder.dueTime ?? '')
+  const skipBlur = useRef(false)
   const meta = reminderMeta(reminder, viewDate)
+
+  function beginEdit() {
+    setTitleDraft(reminder.title)
+    setTimeDraft(reminder.dueTime ?? '')
+    setEditing(true)
+  }
+
+  function save() {
+    const title = titleDraft.trim()
+    const dueTime = timeDraft || null
+    setEditing(false)
+    if (!title) return
+    if (title === reminder.title && dueTime === reminder.dueTime) return
+    onSave({ title, dueTime })
+  }
+
+  function onEditorBlur(e: { relatedTarget: EventTarget | null }) {
+    if (skipBlur.current) {
+      skipBlur.current = false
+      return
+    }
+    const next = e.relatedTarget as HTMLElement | null
+    if (next?.closest('.now-reminder')) return
+    save()
+  }
+
   return (
-    <li className={`now-item now-reminder${reminder.done ? ' is-done' : ''}`}>
+    <li
+      ref={setNodeRef}
+      className={`now-item now-reminder is-sortable${reminder.done ? ' is-done' : ''}${isDragging ? ' is-dragging' : ''}${editing ? ' is-editing' : ''}`}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      {...attributes}
+      {...listeners}
+      role="group"
+      aria-roledescription="sortable"
+      aria-label={nowCopy.dragReminder(reminder.title)}
+    >
+      <span className="list-drag-handle subtask-drag-handle" aria-hidden>
+        <IconGripVertical {...ICON} aria-hidden />
+      </span>
       <Checkbox
         size="xs"
         checked={reminder.done}
         disabled={busy}
+        data-no-dnd
         aria-label={
           reminder.done
             ? `${nowCopy.markNotDone}: ${reminder.title}`
@@ -637,10 +893,61 @@ function ReminderRow({
         onChange={() => onToggle(!reminder.done)}
       />
       <div className="now-item-body">
-        <span className="now-item-title">{reminder.title}</span>
-        {meta ? <span className="now-item-parent">{meta}</span> : null}
+        {editing ? (
+          <>
+            <Textarea
+              className="now-reminder-editor"
+              autosize
+              minRows={1}
+              size="xs"
+              value={titleDraft}
+              disabled={busy}
+              data-no-dnd
+              autoFocus
+              aria-label={nowCopy.editReminder}
+              onChange={(e) => setTitleDraft(e.currentTarget.value)}
+              onBlur={onEditorBlur}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  skipBlur.current = true
+                  setEditing(false)
+                  return
+                }
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  skipBlur.current = true
+                  save()
+                }
+              }}
+            />
+            <input
+              type="time"
+              className="now-reminder-time"
+              value={timeDraft}
+              aria-label={nowCopy.timeAria}
+              disabled={busy}
+              data-no-dnd
+              onChange={(e) => setTimeDraft(e.currentTarget.value)}
+              onBlur={onEditorBlur}
+            />
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="now-item-title"
+              data-no-dnd
+              aria-label={`${nowCopy.editReminder}: ${reminder.title}`}
+              onClick={beginEdit}
+            >
+              {reminder.title}
+            </button>
+            {meta ? <span className="now-item-parent">{meta}</span> : null}
+          </>
+        )}
       </div>
-      <div className="now-item-actions">
+      <div className="now-item-actions" data-no-dnd>
         <ActionIcon
           color="red"
           variant="subtle"

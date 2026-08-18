@@ -33,17 +33,11 @@ export function isPendingReminder(
   return reminder.dueDate <= viewDate
 }
 
-/** Timed items first (by time), then untimed; stable by position then id. */
+/** User order first, then due date, then id. Time is a label only. */
 export function sortReminders(items: ReminderRow[]): ReminderRow[] {
   return [...items].sort((a, b) => {
-    const aTimed = Boolean(a.dueTime)
-    const bTimed = Boolean(b.dueTime)
-    if (aTimed !== bTimed) return aTimed ? -1 : 1
-    if (a.dueTime && b.dueTime && a.dueTime !== b.dueTime) {
-      return a.dueTime.localeCompare(b.dueTime)
-    }
-    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate)
     if (a.position !== b.position) return a.position - b.position
+    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate)
     return a.id.localeCompare(b.id)
   })
 }

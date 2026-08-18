@@ -1,4 +1,4 @@
-import type { Subtask, Task } from '../types'
+import type { PinnedChecklistItem, Subtask, Task } from '../types'
 import { insertIdAfter } from './focus-checklist'
 
 /** Merge a server task into the list; optionally clear other running timers (timer start). */
@@ -136,6 +136,40 @@ export function patchSubtaskLocal(
       subtaskProgress: { done, total: subtasks.length },
     }
   })
+}
+
+/** Insert a Now-page snapshot only when that task is not already loaded. */
+export function ensureTaskPresent(tasks: Task[], snapshot: Task): Task[] {
+  if (tasks.some((t) => t.id === snapshot.id)) return tasks
+  return [...tasks, snapshot]
+}
+
+/** Prefer live App.tasks fields on Now rows; drop unpinned or done items. */
+export function overlayNowItems(
+  items: PinnedChecklistItem[],
+  tasks: Task[],
+): PinnedChecklistItem[] {
+  if (tasks.length === 0) return items
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  const next: PinnedChecklistItem[] = []
+  for (const item of items) {
+    const live = byId.get(item.taskId)
+    if (!live) {
+      next.push(item)
+      continue
+    }
+    const sub = (live.subtasks || []).find((s) => s.id === item.id)
+    if (!sub || !sub.pinned || sub.done) continue
+    next.push({
+      ...item,
+      ...sub,
+      taskTitle: live.title,
+      task: live,
+      timerStartedAt: live.entry?.timerStartedAt ?? item.timerStartedAt,
+      timerSubtaskId: live.entry?.timerSubtaskId ?? item.timerSubtaskId,
+    })
+  }
+  return next
 }
 
 /**

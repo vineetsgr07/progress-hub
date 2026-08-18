@@ -27,10 +27,10 @@ Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: tr
 ## Features
 
 - **Full-screen workspace** — sticky header, date navigation, category filters
-- **Now** — default landing, centered reading column. Order: pinned tasks, habits, then reminders. Incomplete reminders stay on Now until you mark them done. Completed habits tuck under Show all. No week rail, filters, or stats on this page. On a phone the column is locked (no sideways pan); pin, timer, and reminder add stay on one line.
+- **Now** — default landing, centered reading column. Order: pinned tasks, habits, then reminders. Drag to reorder each list. Incomplete reminders stay on Now until you mark them done. Click a reminder to edit (multiline + time). Completed habits tuck under Show all. No week rail, filters, or stats on this page. On a phone the column is locked (no sideways pan); pin, timer, and reminder add stay on one line.
 - **Today / Master** — complete tasks, live timers, hours, day goal
 - **Pin to Now** — pin icon beside the checklist timer; pinned items stay until you unpin. Completing hides them from Now for that day. Drag to reorder on Now; that order is separate from the parent task’s checklist.
-- **Reminders** — title + optional time, added on Now. Undone items carry forward to later days. No phone notifications in this version.
+- **Reminders** — title + optional time, added on Now. Click a row to edit the title (multiline) and time. Drag to reorder. Undone items carry forward to later days. No phone notifications in this version.
 - **Focus Mode** — Play on Today opens a bare session view (title, checklist item, Until break countdown, Time worked); Leave keeps the timer, Stop ends it; gentle beep/notification when the countdown hits zero
 - **Checklist focus timers** — start/stop the timer on a checklist item; time locks to that item; parent task shows the sum; HOURS LOGGED shows a session strip (hover for task + checklist)
 - **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list; idle timers shrink to a play icon on phones. Daily item checks carry forward to later days; the parent Daily still resets each morning. Rituals that should reset belong in Habits.

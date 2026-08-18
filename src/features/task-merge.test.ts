@@ -1,5 +1,9 @@
-import type { Task } from '../types'
-import { settleRunningSubtaskTimer } from './task-merge'
+import type { PinnedChecklistItem, Task } from '../types'
+import {
+  ensureTaskPresent,
+  overlayNowItems,
+  settleRunningSubtaskTimer,
+} from './task-merge'
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg)
@@ -80,6 +84,61 @@ function baseTask(overrides: Partial<Task> = {}): Task {
   )
   assert(next.entry?.timerSubtaskId === 'sub-a', 'timer stays on alpha')
   assert(next.status === 'doing', 'status unchanged')
+}
+
+{
+  const live = baseTask({
+    subtasks: [
+      { ...baseTask().subtasks[0], title: 'Renamed', pinned: true },
+      baseTask().subtasks[1],
+    ],
+  })
+  const stale = baseTask({
+    subtasks: [
+      { ...baseTask().subtasks[0], title: 'Alpha', pinned: true },
+      baseTask().subtasks[1],
+    ],
+  })
+  const kept = ensureTaskPresent([live], stale)
+  assert(kept.length === 1, 'existing task is not duplicated')
+  assert(kept[0].subtasks[0].title === 'Renamed', 'live title wins over snapshot')
+  const inserted = ensureTaskPresent([], stale)
+  assert(inserted.length === 1, 'missing task is inserted')
+  assert(inserted[0].id === 'task-1', 'inserted snapshot keeps id')
+}
+
+{
+  const pinned = {
+    ...baseTask().subtasks[0],
+    title: 'Alpha',
+    pinned: true,
+    taskTitle: 'Parent',
+    task: baseTask(),
+    timerStartedAt: null,
+    timerSubtaskId: null,
+  } satisfies PinnedChecklistItem
+  const live = baseTask({
+    title: 'Live parent',
+    subtasks: [{ ...pinned, title: 'Live title', pinned: true }],
+    entry: { ...baseTask().entry!, timerStartedAt: '2026-08-12T10:00:00.000Z' },
+  })
+  const [overlaid] = overlayNowItems([pinned], [live])
+  assert(overlaid.title === 'Live title', 'overlay applies live title')
+  assert(overlaid.taskTitle === 'Live parent', 'overlay applies live parent title')
+  assert(overlaid.task === live, 'overlay uses live task')
+  assert(
+    overlaid.timerStartedAt === '2026-08-12T10:00:00.000Z',
+    'overlay copies live timer',
+  )
+  assert(overlayNowItems([pinned], []).length === 1, 'empty tasks keeps snapshot')
+  const done = baseTask({
+    subtasks: [{ ...pinned, title: 'Live title', pinned: true, done: true }],
+  })
+  assert(overlayNowItems([pinned], [done]).length === 0, 'overlay hides done')
+  const unpinned = baseTask({
+    subtasks: [{ ...pinned, pinned: false }],
+  })
+  assert(overlayNowItems([pinned], [unpinned]).length === 0, 'overlay hides unpinned')
 }
 
 console.log('task-merge tests passed')
