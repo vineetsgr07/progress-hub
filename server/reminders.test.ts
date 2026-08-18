@@ -26,6 +26,12 @@ assert.equal(
   true,
   'overdue incomplete stays pending',
 )
+assert.equal(
+  isPendingReminder(base, '2026-08-18'),
+  true,
+  'undone reminder carries to the next day',
+)
+assert.equal(isPendingReminder({ ...base, done: true }, '2026-08-18'), false)
 
 assert.equal(parseDueTime(undefined), undefined)
 assert.equal(parseDueTime(null), null)

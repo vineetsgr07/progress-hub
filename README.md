@@ -27,10 +27,10 @@ Phone on the same Wi-Fi for local UI only: `npm run dev` binds to LAN (`host: tr
 ## Features
 
 - **Full-screen workspace** — sticky header, date navigation, category filters
-- **Now** — default landing, centered reading column. Daily habits, pinned checklist items, and reminders due today (plus overdue incomplete reminders). Completed habits tuck under Show all. No week rail, filters, or stats on this page. On a phone, pin and timer wrap under the title.
+- **Now** — default landing, centered reading column. Order: pinned tasks, habits, then reminders. Incomplete reminders stay on Now until you mark them done. Completed habits tuck under Show all. No week rail, filters, or stats on this page. On a phone, pin and timer wrap under the title.
 - **Today / Master** — complete tasks, live timers, hours, day goal
 - **Pin to Now** — pin icon beside the checklist timer; pinned items stay until you unpin. Completing hides them from Now for that day. Drag to reorder on Now; that order is separate from the parent task’s checklist.
-- **Reminders** — title + optional time, added on Now. No phone notifications in this version.
+- **Reminders** — title + optional time, added on Now. Undone items carry forward to later days. No phone notifications in this version.
 - **Focus Mode** — Play on Today opens a bare session view (title, checklist item, Until break countdown, Time worked); Leave keeps the timer, Stop ends it; gentle beep/notification when the countdown hits zero
 - **Checklist focus timers** — start/stop the timer on a checklist item; time locks to that item; parent task shows the sum; HOURS LOGGED shows a session strip (hover for task + checklist)
 - **Checklists (subtasks)** — visible by default under the parent row; collapse via chevron; compact nested list; idle timers shrink to a play icon on phones

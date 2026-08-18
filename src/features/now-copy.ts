@@ -5,7 +5,10 @@ export const nowCopy = {
   reminders: 'Reminders',
   emptyTasks: 'Pin a checklist item from Today to work on it here.',
   emptyHabits: 'Add habits on Today — they show up here each day.',
-  emptyReminders: 'Nothing due today. Add a reminder.',
+  emptyReminders: 'Nothing waiting. Add a reminder.',
+  stillOpen: (date: string) => `Still open from ${date}`,
+  stillOpenTimed: (date: string, time: string) =>
+    `Still open from ${date} · ${time}`,
   showAll: (n: number) =>
     n === 1 ? 'Show all (1 done)' : `Show all (${n} done)`,
   hideDone: 'Hide done',

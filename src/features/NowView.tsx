@@ -155,6 +155,31 @@ export function NowView({
         </div>
       ) : null}
 
+      <section className="now-section" aria-labelledby="now-tasks-title">
+        <h2 id="now-tasks-title" className="now-section-title">
+          {nowCopy.tasks}
+        </h2>
+        {!loading && items.length === 0 ? (
+          <p className="now-empty">{nowCopy.emptyTasks}</p>
+        ) : null}
+        {items.length > 0 ? (
+          <NowTaskList
+            items={items}
+            busy={busy}
+            liveHours={liveHours}
+            onOpenTask={onOpenTask}
+            onEnsureTask={onEnsureTask}
+            onToggleItem={onToggleItem}
+            onTogglePin={onTogglePin}
+            onToggleTimer={onToggleTimer}
+            onError={onError}
+            onToast={onToast}
+            setPage={setPage}
+            load={load}
+          />
+        ) : null}
+      </section>
+
       <section className="now-section" aria-labelledby="now-habits-title">
         <h2 id="now-habits-title" className="now-section-title">
           {nowCopy.habits}
@@ -232,31 +257,6 @@ export function NowView({
         ) : null}
       </section>
 
-      <section className="now-section" aria-labelledby="now-tasks-title">
-        <h2 id="now-tasks-title" className="now-section-title">
-          {nowCopy.tasks}
-        </h2>
-        {!loading && items.length === 0 ? (
-          <p className="now-empty">{nowCopy.emptyTasks}</p>
-        ) : null}
-        {items.length > 0 ? (
-          <NowTaskList
-            items={items}
-            busy={busy}
-            liveHours={liveHours}
-            onOpenTask={onOpenTask}
-            onEnsureTask={onEnsureTask}
-            onToggleItem={onToggleItem}
-            onTogglePin={onTogglePin}
-            onToggleTimer={onToggleTimer}
-            onError={onError}
-            onToast={onToast}
-            setPage={setPage}
-            load={load}
-          />
-        ) : null}
-      </section>
-
       <section className="now-section" aria-labelledby="now-reminders-title">
         <h2 id="now-reminders-title" className="now-section-title">
           {nowCopy.reminders}
@@ -270,6 +270,7 @@ export function NowView({
               <ReminderRow
                 key={reminder.id}
                 reminder={reminder}
+                viewDate={date}
                 busy={busy}
                 onToggle={async (done) => {
                   try {
@@ -598,17 +599,29 @@ function HabitRow({
   )
 }
 
+function reminderMeta(reminder: Reminder, viewDate: string) {
+  if (reminder.dueDate < viewDate) {
+    return reminder.dueTime
+      ? nowCopy.stillOpenTimed(reminder.dueDate, reminder.dueTime)
+      : nowCopy.stillOpen(reminder.dueDate)
+  }
+  return reminder.dueTime
+}
+
 function ReminderRow({
   reminder,
+  viewDate,
   busy,
   onToggle,
   onDelete,
 }: {
   reminder: Reminder
+  viewDate: string
   busy?: boolean
   onToggle: (done: boolean) => void
   onDelete: () => void
 }) {
+  const meta = reminderMeta(reminder, viewDate)
   return (
     <li className={`now-item now-reminder${reminder.done ? ' is-done' : ''}`}>
       <Checkbox
@@ -624,9 +637,7 @@ function ReminderRow({
       />
       <div className="now-item-body">
         <span className="now-item-title">{reminder.title}</span>
-        {reminder.dueTime ? (
-          <span className="now-item-parent">{reminder.dueTime}</span>
-        ) : null}
+        {meta ? <span className="now-item-parent">{meta}</span> : null}
       </div>
       <div className="now-item-actions">
         <ActionIcon

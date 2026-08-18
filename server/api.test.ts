@@ -1530,6 +1530,13 @@ try {
       nowBody.reminders.map((r) => r.title),
       ['Overdue call', 'Today note'],
     )
+    const nextDay = await req('GET', '/api/now?date=2026-08-07')
+    assert.equal(nextDay.status, 200)
+    const nextReminders = (
+      nextDay.json as { reminders: Array<{ title: string }> }
+    ).reminders.map((r) => r.title)
+    assert.ok(nextReminders.includes('Today note'))
+    assert.ok(nextReminders.includes('Overdue call'))
     const water = nowBody.habits.find((h) => h.id === nowHabitId)
     assert.ok(water)
     assert.equal(water?.completed, false)
