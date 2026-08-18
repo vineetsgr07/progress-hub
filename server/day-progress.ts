@@ -4,6 +4,7 @@ import {
   visibleOnToday,
 } from './cadence.js'
 import { db } from './db.js'
+import { isoDateKey } from './streak.js'
 
 export type DayProgress = {
   date: string
@@ -105,48 +106,58 @@ function aggregateDays(days: DayProgress[]): Omit<ProgressPoint, 'key' | 'label'
   }
 }
 
-/**
- * Cadence-honest Today-All progress for one calendar day.
- * Live timers only contribute when `date` is the real local today.
- */
-export async function computeDayProgress(date: string): Promise<DayProgress> {
-  const candidates = await db
-    .prepare(
-      `SELECT t.id, t.category, t.created_at, t.cadence_weekday, t.cadence_month_day,
-              COALESCE(d.completed, 0) AS completed,
-              COALESCE(d.hours, 0) AS hours, d.timer_started_at,
-              d.task_id AS entry_task_id
-       FROM tasks t
-       LEFT JOIN day_entries d ON d.task_id = t.id AND d.date = ?
-       WHERE t.is_master = 1`,
-    )
-    .all(date) as Array<{
-    id: string
-    category: string
-    created_at: string
-    cadence_weekday: number | null
-    cadence_month_day: number | null
-    completed: number
-    hours: number
-    timer_started_at: string | null
-    entry_task_id: string | null
-  }>
+/** Goal cadence lookback is the longest (366 days). */
+const CADENCE_LOOKBACK_DAYS = 366
 
-  const completedBeforeStmt = await db.prepare(
-    `SELECT 1 AS ok FROM day_entries
-     WHERE task_id = ? AND completed = 1 AND date >= ? AND date < ?
-     LIMIT 1`,
-  )
+type MasterTaskRow = {
+  id: string
+  category: string
+  created_at: string
+  cadence_weekday: number | null
+  cadence_month_day: number | null
+}
 
-  const rows: typeof candidates = []
-  for (const row of candidates) {
+type DayEntryLite = {
+  task_id: string
+  date: string
+  completed: number
+  hours: number
+  timer_started_at: string | null
+}
+
+function entryKey(taskId: string, date: string) {
+  return `${taskId}:${date}`
+}
+
+function hasCompletedInWindow(
+  dates: ReadonlySet<string> | undefined,
+  startInclusive: string,
+  endExclusive: string,
+): boolean {
+  if (!dates) return false
+  for (const date of dates) {
+    if (date >= startInclusive && date < endExclusive) return true
+  }
+  return false
+}
+
+function progressForDate(
+  date: string,
+  tasks: MasterTaskRow[],
+  entryByKey: Map<string, DayEntryLite>,
+  completedByTask: Map<string, Set<string>>,
+  today: string,
+): DayProgress {
+  const rows: Array<MasterTaskRow & DayEntryLite> = []
+  for (const row of tasks) {
     const createdDateISO = String(row.created_at || '').slice(0, 10)
     const opts = cadenceOptsFromRow(row)
     const prev = previousCadenceDay(row.category, date, opts)
     const occurrenceCompletedBeforeDate = prev
-      ? Boolean(await completedBeforeStmt.get(row.id, prev, date))
+      ? hasCompletedInWindow(completedByTask.get(row.id), prev, date)
       : false
-    const hasDayEntry = row.entry_task_id != null
+    const entry = entryByKey.get(entryKey(row.id, date))
+    const hasDayEntry = entry != null
     if (
       visibleOnToday(
         row.category,
@@ -158,11 +169,18 @@ export async function computeDayProgress(date: string): Promise<DayProgress> {
         hasDayEntry,
       )
     ) {
-      rows.push(row)
+      rows.push({
+        ...row,
+        task_id: entry?.task_id ?? row.id,
+        date,
+        completed: Number(entry?.completed ?? 0),
+        hours: Number(entry?.hours ?? 0),
+        timer_started_at: entry?.timer_started_at ?? null,
+      })
     }
   }
 
-  const includeLiveTimer = date === todayISO()
+  const includeLiveTimer = date === today
   let hours = 0
   let completed = 0
   for (const row of rows) {
@@ -183,6 +201,76 @@ export async function computeDayProgress(date: string): Promise<DayProgress> {
     percent: total ? Math.round((completed / total) * 100) : 0,
     taskIds: rows.map((r) => r.id),
   }
+}
+
+/**
+ * Cadence-honest Today-All progress for many calendar days in two queries.
+ * Live timers only contribute when a date is the real local today.
+ */
+export async function computeDaysProgress(dates: string[]): Promise<DayProgress[]> {
+  if (dates.length === 0) return []
+  const unique = [...new Set(dates)]
+  const minDate = unique.reduce((a, b) => (a < b ? a : b))
+  const maxDate = unique.reduce((a, b) => (a > b ? a : b))
+  const lookbackStart = shiftISODate(minDate, -CADENCE_LOOKBACK_DAYS)
+  const today = todayISO()
+
+  const [taskRows, entryRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT id, category, created_at, cadence_weekday, cadence_month_day
+         FROM tasks
+         WHERE is_master = 1`,
+      )
+      .all() as Promise<MasterTaskRow[]>,
+    db
+      .prepare(
+        `SELECT task_id, date, completed, hours, timer_started_at
+         FROM day_entries
+         WHERE date >= ? AND date <= ?`,
+      )
+      .all(lookbackStart, maxDate) as Promise<DayEntryLite[]>,
+  ])
+
+  const entryByKey = new Map<string, DayEntryLite>()
+  const completedByTask = new Map<string, Set<string>>()
+  for (const row of entryRows) {
+    const date = isoDateKey(row.date)
+    const taskId = String(row.task_id)
+    const normalized: DayEntryLite = {
+      task_id: taskId,
+      date,
+      completed: Number(row.completed ?? 0),
+      hours: Number(row.hours ?? 0),
+      timer_started_at: row.timer_started_at ?? null,
+    }
+    entryByKey.set(entryKey(taskId, date), normalized)
+    if (normalized.completed > 0) {
+      const set = completedByTask.get(taskId) ?? new Set<string>()
+      set.add(date)
+      completedByTask.set(taskId, set)
+    }
+  }
+
+  const tasks = taskRows.map((row) => ({
+    ...row,
+    id: String(row.id),
+    category: String(row.category),
+    created_at: String(row.created_at ?? ''),
+  }))
+
+  return dates.map((date) =>
+    progressForDate(date, tasks, entryByKey, completedByTask, today),
+  )
+}
+
+/**
+ * Cadence-honest Today-All progress for one calendar day.
+ * Live timers only contribute when `date` is the real local today.
+ */
+export async function computeDayProgress(date: string): Promise<DayProgress> {
+  const [day] = await computeDaysProgress([date])
+  return day
 }
 
 export type WeekDayPoint = {
@@ -223,12 +311,28 @@ export async function buildWeekProgress(anchorDate: string): Promise<WeekProgres
   const today = todayISO()
   const weekStart = startOfIsoWeek(anchorDate)
   const weekEnd = shiftISODate(weekStart, 6)
+  const prevStart = shiftISODate(weekStart, -7)
+  const currentDates = Array.from({ length: 7 }, (_, j) => shiftISODate(weekStart, j))
+  const prevDates = Array.from({ length: 7 }, (_, j) => shiftISODate(prevStart, j))
 
-  const days: WeekDayPoint[] = []
-  for (let j = 0; j < 7; j += 1) {
-    const d = shiftISODate(weekStart, j)
-    const day = await computeDayProgress(d)
-    days.push({
+  const [progress, goalRows] = await Promise.all([
+    computeDaysProgress([...currentDates, ...prevDates]),
+    db
+      .prepare(
+        `SELECT date, goal FROM daily_goals
+         WHERE date >= ? AND date <= ?`,
+      )
+      .all(weekStart, weekEnd) as Promise<Array<{ date: string; goal: string }>>,
+  ])
+  const currentProgress = progress.slice(0, 7)
+  const prevDays = progress.slice(7)
+  const goalsByDate = new Map(
+    goalRows.map((r) => [isoDateKey(r.date), String(r.goal ?? '')]),
+  )
+
+  const days: WeekDayPoint[] = currentDates.map((d, j) => {
+    const day = currentProgress[j]
+    return {
       date: d,
       label: weekdayShort(d).slice(0, 3),
       dayOfMonth: parseLocalDate(d).getDate(),
@@ -238,22 +342,9 @@ export async function buildWeekProgress(anchorDate: string): Promise<WeekProgres
       hours: day.hours,
       isToday: d === today,
       isFuture: d > today,
-      goal: '',
-    })
-  }
-
-  const goalRows = await db
-    .prepare(
-      `SELECT date, goal FROM daily_goals
-       WHERE date >= ? AND date <= ?`,
-    )
-    .all(weekStart, weekEnd) as Array<{ date: string; goal: string }>
-  const goalsByDate = new Map(
-    goalRows.map((r) => [String(r.date), String(r.goal ?? '')]),
-  )
-  for (const day of days) {
-    day.goal = goalsByDate.get(day.date) ?? ''
-  }
+      goal: goalsByDate.get(d) ?? '',
+    }
+  })
 
   const summaryAgg = aggregateDays(
     days.map((d) => ({
@@ -277,11 +368,6 @@ export async function buildWeekProgress(anchorDate: string): Promise<WeekProgres
     }
   }
 
-  const prevStart = shiftISODate(weekStart, -7)
-  const prevDays: DayProgress[] = []
-  for (let j = 0; j < 7; j += 1) {
-    prevDays.push(await computeDayProgress(shiftISODate(prevStart, j)))
-  }
   const previous = aggregateDays(prevDays)
 
   return {
@@ -306,56 +392,58 @@ export async function buildProgressSeries(
   range: ProgressRange,
 ): Promise<ProgressPoint[]> {
   if (range === 'day') {
-    const points: ProgressPoint[] = []
-    for (let i = 0; i < 14; i += 1) {
-      const d = shiftISODate(anchorDate, i - 13)
-      const day = await computeDayProgress(d)
-      points.push({
+    const dates = Array.from({ length: 14 }, (_, i) => shiftISODate(anchorDate, i - 13))
+    const days = await computeDaysProgress(dates)
+    return dates.map((d, i) => {
+      const day = days[i]
+      return {
         key: d,
         label: weekdayShort(d),
         completed: day.completed,
         total: day.total,
         hours: day.hours,
         percent: day.percent,
-      })
-    }
-    return points
+      }
+    })
   }
 
   if (range === 'week') {
     const currentWeekStart = startOfIsoWeek(anchorDate)
-    const points: ProgressPoint[] = []
-    for (let i = 0; i < 8; i += 1) {
-      const weekStart = shiftISODate(currentWeekStart, (i - 7) * 7)
-      const days: DayProgress[] = []
-      for (let j = 0; j < 7; j += 1) {
-        days.push(await computeDayProgress(shiftISODate(weekStart, j)))
-      }
-      const agg = aggregateDays(days)
-      points.push({
+    const weekStarts = Array.from({ length: 8 }, (_, i) =>
+      shiftISODate(currentWeekStart, (i - 7) * 7),
+    )
+    const dates = weekStarts.flatMap((weekStart) =>
+      Array.from({ length: 7 }, (_, j) => shiftISODate(weekStart, j)),
+    )
+    const days = await computeDaysProgress(dates)
+    return weekStarts.map((weekStart, i) => {
+      const slice = days.slice(i * 7, i * 7 + 7)
+      return {
         key: weekStart,
         label: `${monthShort(weekStart)} ${parseLocalDate(weekStart).getDate()}`,
-        ...agg,
-      })
-    }
-    return points
+        ...aggregateDays(slice),
+      }
+    })
   }
 
   const currentMonthStart = startOfMonth(anchorDate)
-  const points: ProgressPoint[] = []
-  for (let i = 0; i < 6; i += 1) {
-    const monthStart = startOfMonth(shiftMonths(currentMonthStart, i - 5))
+  const months = Array.from({ length: 6 }, (_, i) =>
+    startOfMonth(shiftMonths(currentMonthStart, i - 5)),
+  )
+  const dates = months.flatMap((monthStart) => {
     const len = daysInMonth(monthStart)
-    const days: DayProgress[] = []
-    for (let j = 0; j < len; j += 1) {
-      days.push(await computeDayProgress(shiftISODate(monthStart, j)))
-    }
-    const agg = aggregateDays(days)
-    points.push({
+    return Array.from({ length: len }, (_, j) => shiftISODate(monthStart, j))
+  })
+  const days = await computeDaysProgress(dates)
+  let offset = 0
+  return months.map((monthStart) => {
+    const len = daysInMonth(monthStart)
+    const slice = days.slice(offset, offset + len)
+    offset += len
+    return {
       key: monthStart.slice(0, 7),
       label: monthShort(monthStart),
-      ...agg,
-    })
-  }
-  return points
+      ...aggregateDays(slice),
+    }
+  })
 }

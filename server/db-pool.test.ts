@@ -2,12 +2,13 @@ import assert from 'node:assert/strict'
 import { isDeadDbConnection, postgresPoolOptions } from './db.ts'
 
 const hosted = postgresPoolOptions('postgresql://user:pass@db.example:6543/postgres')
-assert.equal(hosted.max, 5)
+assert.equal(hosted.max, 8)
 assert.equal(hosted.prepare, false)
+assert.equal(hosted.fetch_types, false)
 assert.equal(hosted.ssl, 'require')
 assert.equal(hosted.idle_timeout, 8)
 assert.equal(hosted.max_lifetime, 60)
-assert.equal(hosted.connect_timeout, 8)
+assert.equal(hosted.connect_timeout, 5)
 
 const local = postgresPoolOptions('postgresql://postgres:postgres@localhost:5432/todo')
 assert.equal(local.ssl, false)

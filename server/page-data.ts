@@ -8,7 +8,7 @@ import { buildAnalyticsInsight } from './analytics-insight.js'
 import { buildWeekProgress, computeDayProgress } from './day-progress.js'
 import { db, getSetting } from './db.js'
 import { buildHabitsProgress } from './habits-history.js'
-import { STREAK_LOOKBACK_DAYS, streakFromDayTotals, streakWindowStart } from './streak.js'
+import { STREAK_LOOKBACK_DAYS, isoDateKey, streakFromDayTotals, streakWindowStart } from './streak.js'
 import {
   filterNotesByScope,
   notesExcerpt,
@@ -319,13 +319,7 @@ export async function loadTaskRows(
       )
       .all()) as Record<string, unknown>[]
 
-    const completedBeforeStmt = await db.prepare(
-      `SELECT 1 AS ok FROM day_entries
-       WHERE task_id = ? AND completed = 1 AND date >= ? AND date < ?
-       LIMIT 1`,
-    )
-
-    for (const row of periodRows) {
+    const periodMeta = periodRows.map((row) => {
       const cat = String(row.category)
       const createdDateISO = String(row.created_at || '').slice(0, 10)
       const cadenceOpts = cadenceOptsFromRow({
@@ -335,23 +329,59 @@ export async function loadTaskRows(
         cadence_month_day:
           row.cadence_month_day == null ? null : Number(row.cadence_month_day),
       })
-      const prev = previousCadenceDay(cat, date, cadenceOpts)
-      const occurrenceCompletedBeforeDate = prev
-        ? Boolean(await completedBeforeStmt.get(String(row.id), prev, date))
+      return {
+        row,
+        cat,
+        createdDateISO,
+        cadenceOpts,
+        prev: previousCadenceDay(cat, date, cadenceOpts),
+      }
+    })
+    const completedByTask = new Map<string, Set<string>>()
+    const withPrev = periodMeta.filter((item) => item.prev)
+    if (withPrev.length > 0) {
+      const ids = [...new Set(withPrev.map((item) => String(item.row.id)))]
+      const minPrev = withPrev.reduce(
+        (min, item) => (item.prev! < min ? item.prev! : min),
+        withPrev[0].prev!,
+      )
+      const placeholders = ids.map(() => '?').join(',')
+      const doneRows = (await db
+        .prepare(
+          `SELECT task_id, date FROM day_entries
+           WHERE completed = 1 AND task_id IN (${placeholders})
+             AND date >= ? AND date < ?`,
+        )
+        .all(...ids, minPrev, date)) as Array<{ task_id: string; date: unknown }>
+      for (const done of doneRows) {
+        const taskId = String(done.task_id)
+        const set = completedByTask.get(taskId) ?? new Set<string>()
+        set.add(isoDateKey(done.date))
+        completedByTask.set(taskId, set)
+      }
+    }
+
+    for (const item of periodMeta) {
+      const occurrenceCompletedBeforeDate = item.prev
+        ? Boolean(
+            [...(completedByTask.get(String(item.row.id)) ?? [])].some(
+              (doneDate) => doneDate >= item.prev! && doneDate < date,
+            ),
+          )
         : false
       if (
         !visibleOnToday(
-          cat,
+          item.cat,
           date,
           occurrenceCompletedBeforeDate,
           null,
-          createdDateISO || null,
-          cadenceOpts,
+          item.createdDateISO || null,
+          item.cadenceOpts,
         )
       ) {
         continue
       }
-      rows.push(row)
+      rows.push(item.row)
     }
     rows.sort((a, b) => {
       const so = Number(a.sort_order) - Number(b.sort_order)
@@ -391,16 +421,25 @@ export async function loadHabits(
     )
     .all()) as Array<Record<string, unknown>>
 
-  const entryStmt = await db.prepare(
-    `SELECT completed FROM habit_entries WHERE habit_id = ? AND date = ?`,
-  )
+  const entryByHabit = new Map<string, { completed: number }>()
+  if (habits.length > 0) {
+    const ids = habits.map((row) => String(row.id))
+    const placeholders = ids.map(() => '?').join(',')
+    const entries = (await db
+      .prepare(
+        `SELECT habit_id, completed FROM habit_entries
+         WHERE date = ? AND habit_id IN (${placeholders})`,
+      )
+      .all(date, ...ids)) as Array<{ habit_id: string; completed: number }>
+    for (const entry of entries) {
+      entryByHabit.set(String(entry.habit_id), { completed: Number(entry.completed) })
+    }
+  }
 
   let completed = 0
   const mapped = []
   for (const row of habits) {
-    const entry = (await entryStmt.get(String(row.id), date)) as
-      | { completed: number }
-      | undefined
+    const entry = entryByHabit.get(String(row.id))
     if (entry?.completed) completed += 1
     mapped.push(mapHabit(row, entry ?? null))
   }

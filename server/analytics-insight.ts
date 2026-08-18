@@ -1,5 +1,5 @@
 import { db } from './db.js'
-import { computeDayProgress } from './day-progress.js'
+import { computeDaysProgress } from './day-progress.js'
 import { buildHabitsProgress } from './habits-history.js'
 
 export const DEFAULT_WORK_TARGET_HOURS = 12
@@ -165,27 +165,28 @@ export async function buildBudgetSeries(
   dayCount = 14,
   goals: AnalyticsGoals = resolveAnalyticsGoals(),
 ): Promise<BudgetDayPoint[]> {
-  const habits = await buildHabitsProgress(dayCount, endDate)
-  const byDate = new Map(habits.daily.map((d) => [d.date, d]))
   const start = rangeStartISO(endDate, dayCount)
-  const points: BudgetDayPoint[] = []
-  for (let i = 0; i < dayCount; i += 1) {
+  const dates = Array.from({ length: dayCount }, (_, i) => {
     const date = parseLocalDate(start)
     date.setDate(date.getDate() + i)
-    const iso = formatLocalDate(date)
-    const day = await computeDayProgress(iso)
+    return formatLocalDate(date)
+  })
+  const [habits, days] = await Promise.all([
+    buildHabitsProgress(dayCount, endDate),
+    computeDaysProgress(dates),
+  ])
+  const byDate = new Map(habits.daily.map((d) => [d.date, d]))
+  return dates.map((iso, i) => {
+    const day = days[i]
     const habit = byDate.get(iso)
-    points.push(
-      buildBudgetDayPoint(
-        iso,
-        day.hours,
-        habit?.completed ?? 0,
-        habit?.total ?? 0,
-        goals,
-      ),
+    return buildBudgetDayPoint(
+      iso,
+      day.hours,
+      habit?.completed ?? 0,
+      habit?.total ?? 0,
+      goals,
     )
-  }
-  return points
+  })
 }
 
 /**

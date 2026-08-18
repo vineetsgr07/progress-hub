@@ -83,16 +83,37 @@ function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
   return next
 }
 
+export const POSTGRES_QUERY_TIMEOUT_MS = 8_000
+
 export function postgresPoolOptions(databaseUrl: string) {
   return {
-    max: 5,
+    max: 8,
     prepare: false as const,
+    fetch_types: false as const,
     ssl: (databaseUrl.includes('localhost') ? false : 'require') as false | 'require',
     idle_timeout: 8,
     max_lifetime: 60,
-    connect_timeout: 8,
+    connect_timeout: 5,
     onnotice: () => {},
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('timeout'))
+    }, ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
 }
 
 export function isDeadDbConnection(error: unknown) {
@@ -113,10 +134,10 @@ async function createPostgresSession(databaseUrl: string): Promise<RootSession> 
     params?: unknown[],
   ): Promise<QueryResult> => {
     try {
-      const rows = (await client.unsafe(query, params ?? [])) as unknown as Record<
-        string,
-        unknown
-      >[]
+      const rows = (await withTimeout(
+        client.unsafe(query, params ?? []),
+        POSTGRES_QUERY_TIMEOUT_MS,
+      )) as unknown as Record<string, unknown>[]
       const rowCount = Array.isArray(rows) ? rows.length : Number(rows?.count ?? 0)
       const list = Array.isArray(rows) ? rows.map((row) => coerceRow(row)) : []
       return {
@@ -135,7 +156,7 @@ async function createPostgresSession(databaseUrl: string): Promise<RootSession> 
     query: (query, params) => run(client, query, params),
     exec: async (query) => {
       try {
-        await client.unsafe(query)
+        await withTimeout(client.unsafe(query), POSTGRES_QUERY_TIMEOUT_MS)
       } catch (error) {
         if (isDeadDbConnection(error)) resetPostgres()
         throw error
@@ -213,17 +234,27 @@ async function session(): Promise<SqlSession> {
 }
 
 async function execSql(sql: string): Promise<void> {
-  const s = await session()
-  const chunks = sql
-    .split(/;\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-  if (chunks.length <= 1) {
-    await s.exec(rewriteSql(sql))
-    return
+  const run = async () => {
+    const s = await session()
+    const chunks = sql
+      .split(/;\s*\n/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+    if (chunks.length <= 1) {
+      await s.exec(rewriteSql(sql))
+      return
+    }
+    for (const chunk of chunks) {
+      await s.exec(rewriteSql(chunk.endsWith(';') ? chunk : `${chunk};`))
+    }
   }
-  for (const chunk of chunks) {
-    await s.exec(rewriteSql(chunk.endsWith(';') ? chunk : `${chunk};`))
+  try {
+    await run()
+  } catch (error) {
+    if (als.getStore() || !process.env.DATABASE_URL || !isDeadDbConnection(error)) {
+      throw error
+    }
+    await run()
   }
 }
 
@@ -655,6 +686,18 @@ export async function getSetting(key: string): Promise<string | null> {
     | { value: string }
     | undefined
   return row?.value ?? null
+}
+
+export async function getSettings(keys: string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {}
+  for (const key of keys) out[key] = null
+  if (keys.length === 0) return out
+  const placeholders = keys.map(() => '?').join(',')
+  const rows = (await db
+    .prepare(`SELECT key, value FROM app_settings WHERE key IN (${placeholders})`)
+    .all(...keys)) as Array<{ key: string; value: string }>
+  for (const row of rows) out[String(row.key)] = row.value ?? null
+  return out
 }
 
 export async function setSetting(key: string, value: string) {

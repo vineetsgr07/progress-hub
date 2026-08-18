@@ -9,7 +9,7 @@ process.env.TRACKER_DB_PATH = path.join(dir, 'test.db')
 process.env.TRACKER_SKIP_SEED = '1'
 
 const { migrate, db } = await import('./db.js')
-const { buildWeekProgress } = await import('./day-progress.js')
+const { buildWeekProgress, computeDayProgress, computeDaysProgress } = await import('./day-progress.js')
 
 await migrate()
 
@@ -102,6 +102,22 @@ try {
   assert.equal(weekWithGoal.days[2].date, '2026-08-05')
   assert.equal(weekWithGoal.days[2].goal, 'Ship week panel')
   assert.equal(weekWithGoal.days[0].goal, '')
+
+  await db.prepare(
+    `INSERT INTO tasks (id, title, notes, category, project_tag, priority, status, is_master,
+      created_at, updated_at, sort_order, board_sort, cadence_weekday)
+     VALUES (?, ?, '', 'Weekly', 'Work', 'Medium', 'todo', 1, ?, ?, 0, 0, 5)`,
+  ).run('weekly-1', 'Friday review', '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z')
+
+  const satOpen = await computeDayProgress('2026-08-08')
+  assert.ok(satOpen.taskIds.includes('weekly-1'), 'incomplete Friday weekly overflows to Saturday')
+  const friSat = await computeDaysProgress(['2026-08-07', '2026-08-08'])
+  assert.ok(friSat[0].taskIds.includes('weekly-1'))
+  assert.ok(friSat[1].taskIds.includes('weekly-1'))
+
+  await insertEntry('weekly-1', '2026-08-07', 1)
+  const satDone = await computeDayProgress('2026-08-08')
+  assert.ok(!satDone.taskIds.includes('weekly-1'), 'completed Friday weekly hides on Saturday')
 
   console.log('week-progress tests passed')
 } finally {

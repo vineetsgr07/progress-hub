@@ -14,6 +14,7 @@ import {
   getBacklogColumnId,
   getDoingColumnId,
   getSetting,
+  getSettings,
   getTerminalColumnId,
   migrate,
   parseColumnRole,
@@ -465,9 +466,10 @@ app.get('/api/health', async (_req, res) => {
 })
 
 async function readAppSettings() {
-  const listSort = parseListSort(await getSetting('list_sort'))
+  const values = await getSettings(['list_sort', 'tag_colors', 'tag_lists'])
+  const listSort = parseListSort(values.list_sort)
   let tagColors: unknown = null
-  const rawColors = await getSetting('tag_colors')
+  const rawColors = values.tag_colors
   if (rawColors) {
     try {
       tagColors = JSON.parse(rawColors)
@@ -476,7 +478,7 @@ async function readAppSettings() {
     }
   }
   let tagLists: unknown = null
-  const rawLists = await getSetting('tag_lists')
+  const rawLists = values.tag_lists
   if (rawLists) {
     try {
       tagLists = JSON.parse(rawLists)
