@@ -75,6 +75,18 @@ assert.equal(
   ),
   true,
 )
+assert.equal(
+  isNoDndTarget(
+    stub({ tag: 'label', attrs: { 'data-no-dnd': '', class: 'now-item-check' } }) as unknown as EventTarget,
+  ),
+  true,
+)
+assert.equal(
+  isNoDndTarget(
+    stub({ tag: 'div', attrs: { class: 'mantine-Checkbox-root' } }) as unknown as EventTarget,
+  ),
+  false,
+)
 
 {
   const host = stub({ tag: 'div', attrs: { 'data-no-dnd': '' } })

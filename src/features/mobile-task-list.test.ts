@@ -109,6 +109,16 @@ assert.match(
   'Now task rows allow vertical scroll before a touch drag',
 )
 assert.match(
+  css,
+  /\.now-item-check\s*\{[^}]*cursor:\s*pointer/,
+  'Now checkboxes sit in a tappable label, not a dead overlay',
+)
+assert.match(
+  css,
+  /\.now-item-check::after\s*\{[^}]*inset:\s*-12px -8px/,
+  'Now checkbox hit area lives on the label so a thumb tap toggles',
+)
+assert.match(
   phone,
   /\.task-row\s*>\s*\.list-drag-handle\s*\{[^}]*display:\s*none/,
   'phone task rows hide the drag-handle column',
@@ -296,6 +306,11 @@ assert.doesNotMatch(
   phoneNow,
   /\.now-item:has\(\.now-item-actions\)[^{]*\{[^}]*grid-template-areas:/,
   'phone Now rows must not wrap pin and timer under the title',
+)
+assert.doesNotMatch(
+  css,
+  /\.now-item[^{]*\.mantine-Checkbox-root::after/,
+  'Now hit-area overlay must not sit on the Mantine root div',
 )
 assert.match(
   phoneNow,

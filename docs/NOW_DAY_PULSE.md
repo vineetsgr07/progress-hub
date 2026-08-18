@@ -13,6 +13,7 @@ Now is the same-day work surface. The right column shows how close the selected 
 - Overdue reminders do not appear on Now. The pulse can show “N still open” and open the Reminders tab.
 - When-chip: date required (defaults to the viewed day), time optional. Another date saves and leaves Now.
 - Empty pulse is not 0%. 100% is a quiet “That’s the day”.
+- Phone checkboxes are a wrapping label (`NowItemCheck`). Do not put a `::after` hit-area on Mantine’s root `div` — that overlay eats the tap and never toggles.
 
 Pulse math lives in [`server/now-progress.ts`](../server/now-progress.ts) for the API and [`src/features/now-progress.ts`](../src/features/now-progress.ts) for the client. Do not import `src/` from `server/` — Vercel’s function cannot resolve that.
 
@@ -24,3 +25,4 @@ Pulse math lives in [`server/now-progress.ts`](../server/now-progress.ts) for th
 - AC4: Changing a reminder’s date off D removes it from Now and toasts the saved date.
 - AC5: Reminders tab lists Overdue / This day / Later / Done.
 - AC6: Lint, unit, API tests, and `npm run build` pass.
+- AC7: A thumb tap on a Now checkbox marks the item done (label hit-area, not a dead overlay).

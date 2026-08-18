@@ -32,6 +32,7 @@ import {
 import { habitsCopy } from './habits-copy'
 import { nowCopy } from './now-copy'
 import { EMPTY_NOW_PROGRESS, nowProgressFromLists } from './now-progress'
+import { NowItemCheck } from './NowItemCheck'
 import { NowPulse } from './NowPulse'
 import { ReminderList } from './ReminderList'
 import { ReminderWhen } from './ReminderWhen'
@@ -562,28 +563,29 @@ function SortableNowItem({
       <span className="list-drag-handle subtask-drag-handle" aria-hidden>
         <IconGripVertical {...ICON} aria-hidden />
       </span>
-      <Checkbox
-        size="xs"
-        checked={item.done}
-        disabled={busy}
-        data-no-dnd
-        aria-label={
-          item.done
-            ? `${nowCopy.markNotDone}: ${plain}`
-            : `${nowCopy.markDone}: ${plain}`
-        }
-        onChange={() => {
-          onToggleItem(item.taskId, item.id, !item.done)
-          setPage((prev) =>
-            prev
-              ? withNowProgress(prev, {
-                  items: prev.items.filter((row) => row.id !== item.id),
-                  checklistCompleted: prev.progress.checklist.completed + 1,
-                })
-              : prev,
-          )
-        }}
-      />
+      <NowItemCheck>
+        <Checkbox
+          size="xs"
+          checked={item.done}
+          disabled={busy}
+          aria-label={
+            item.done
+              ? `${nowCopy.markNotDone}: ${plain}`
+              : `${nowCopy.markDone}: ${plain}`
+          }
+          onChange={() => {
+            onToggleItem(item.taskId, item.id, !item.done)
+            setPage((prev) =>
+              prev
+                ? withNowProgress(prev, {
+                    items: prev.items.filter((row) => row.id !== item.id),
+                    checklistCompleted: prev.progress.checklist.completed + 1,
+                  })
+                : prev,
+            )
+          }}
+        />
+      </NowItemCheck>
       <div className="now-item-body">
         <button
           type="button"
@@ -785,14 +787,15 @@ function SortableHabitRow({
       <span className="list-drag-handle subtask-drag-handle" aria-hidden>
         <IconGripVertical {...ICON} aria-hidden />
       </span>
-      <Checkbox
-        size="xs"
-        checked={habit.completed}
-        disabled={busy}
-        data-no-dnd
-        aria-label={habitsCopy.toggleAria(habit.title, habit.completed)}
-        onChange={onToggle}
-      />
+      <NowItemCheck>
+        <Checkbox
+          size="xs"
+          checked={habit.completed}
+          disabled={busy}
+          aria-label={habitsCopy.toggleAria(habit.title, habit.completed)}
+          onChange={onToggle}
+        />
+      </NowItemCheck>
       <div className="now-item-body">
         <span className="now-item-title">{habit.title}</span>
       </div>

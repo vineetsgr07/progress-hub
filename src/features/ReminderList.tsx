@@ -23,6 +23,7 @@ import {
   TaskMouseSensor,
   TaskTouchSensor,
 } from './drag-sensors'
+import { NowItemCheck } from './NowItemCheck'
 import { nowCopy } from './now-copy'
 import { ReminderWhen } from './ReminderWhen'
 
@@ -246,18 +247,19 @@ function SortableReminderRow({
       <span className="list-drag-handle subtask-drag-handle" aria-hidden>
         <IconGripVertical {...ICON} aria-hidden />
       </span>
-      <Checkbox
-        size="xs"
-        checked={reminder.done}
-        disabled={busy}
-        data-no-dnd
-        aria-label={
-          reminder.done
-            ? `${nowCopy.markNotDone}: ${reminder.title}`
-            : `${nowCopy.markDone}: ${reminder.title}`
-        }
-        onChange={() => onToggle(!reminder.done)}
-      />
+      <NowItemCheck>
+        <Checkbox
+          size="xs"
+          checked={reminder.done}
+          disabled={busy}
+          aria-label={
+            reminder.done
+              ? `${nowCopy.markNotDone}: ${reminder.title}`
+              : `${nowCopy.markDone}: ${reminder.title}`
+          }
+          onChange={() => onToggle(!reminder.done)}
+        />
+      </NowItemCheck>
       <div className="now-item-body">
         {editing ? (
           <div className="now-reminder-editor-row">
