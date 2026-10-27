@@ -1,5 +1,7 @@
 # Daily & Weekly Progress Hub
 
+[![CI](https://github.com/vineetsgr07/todo-app/actions/workflows/ci.yml/badge.svg)](https://github.com/vineetsgr07/todo-app/actions/workflows/ci.yml)
+
 A personal todo and progress tracker that replaces a daily-tracker spreadsheet: daily, weekly and monthly tasks with checklists, focus timers, hours logged, habits, reminders, notes and progress charts. Runs locally or as an installable PWA.
 
 **Who it's for:** one person (solo founders, freelancers, students) who plans their day around repeating routines and wants to see what actually got done each week. Each deployment is single-user: sign-in is limited to the emails in `AUTH_ALLOWED_EMAILS`.
