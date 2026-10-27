@@ -93,8 +93,7 @@ export function HabitsPanel({
       if (!habitsRef.current) setHabits(null)
       setError(habitsCopy.error)
     } finally {
-      if (requestId.current !== id) return
-      setRefreshing(false)
+      if (requestId.current === id) setRefreshing(false)
     }
   }
 
