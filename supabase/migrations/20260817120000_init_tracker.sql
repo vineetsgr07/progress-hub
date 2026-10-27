@@ -1,4 +1,4 @@
--- Progressive Hub tracker schema (new project only — not Actofy).
+-- Progressive Hub tracker schema.
 -- RLS on; no anon/authenticated policies. The Express API uses DATABASE_URL.
 
 CREATE TABLE IF NOT EXISTS tasks (

@@ -1,6 +1,10 @@
 # Daily & Weekly Progress Hub
 
-Local React todo / progress tracker modeled after the [Daily Tracker](https://example.com/daily-tracker) spreadsheet.
+A personal todo and progress tracker that replaces a daily-tracker spreadsheet: daily, weekly and monthly tasks with checklists, focus timers, hours logged, habits, reminders, notes and progress charts. Runs locally or as an installable PWA.
+
+**Who it's for:** one person (solo founders, freelancers, students) who plans their day around repeating routines and wants to see what actually got done each week. Each deployment is single-user: sign-in is limited to the emails in `AUTH_ALLOWED_EMAILS`.
+
+**Built with:** React 19 + Vite + TypeScript, Mantine UI, BlockNote (rich-text notes), dnd-kit (drag and drop), React Flow (mind maps), Express API, PGlite locally or Supabase Postgres + Supabase Auth when hosted, deployed on Vercel.
 
 ## Product freeze (core)
 
@@ -47,7 +51,7 @@ Data is stored locally in PGlite (`data/pglite`) during `npm run dev`, or in the
 
 ## Hosted (Vercel + new Supabase project)
 
-This app uses a **new** Supabase project (`progressive-hub`), not Actofy auth.
+This app uses its own Supabase project (`progressive-hub`).
 
 1. In the new project SQL editor, run [`supabase/migrations/20260817120000_init_tracker.sql`](supabase/migrations/20260817120000_init_tracker.sql), then [`supabase/migrations/20260818010000_now_pins_reminders.sql`](supabase/migrations/20260818010000_now_pins_reminders.sql) (pins + reminders), then [`supabase/migrations/20260818020000_now_pin_sort.sql`](supabase/migrations/20260818020000_now_pin_sort.sql) (Now drag order). Existing projects need the later files they have not already run.
 2. Authentication → Providers → Google: paste the new Google OAuth client ID and secret.
@@ -128,3 +132,21 @@ Opens:
 - `GET/PATCH/DELETE /api/mindmaps/:id` — full document (nodes, edges, viewport)
 - `GET /api/export`
 - `POST /api/import` — replace-all restore from export JSON
+
+## Roadmap
+
+Planned work, roughly in order:
+
+- [ ] Offline mode: queue task, checklist and timer changes while offline and sync them on reconnect (today offline does not sync).
+- [ ] Reminder notifications on the installed PWA (web push), including on iPhone home-screen installs.
+- [ ] Repeating reminders (daily, weekly, monthly) using the same cadence rules as tasks.
+- [ ] Calendar view of hours logged per day and per project.
+- [ ] Keyboard shortcuts and a command palette for adding, pinning and completing tasks.
+- [ ] Notes: link notes to each other and to tasks, and better search ranking.
+- [ ] Maps: export a mind map as PNG or Markdown.
+- [ ] Move the long chained `npm test` script to one test runner with coverage, and add end-to-end tests for Now and Today.
+- [ ] Accessibility pass: keyboard drag and drop, screen-reader labels, focus order in modals.
+
+## License
+
+MIT, see [`LICENSE`](LICENSE).

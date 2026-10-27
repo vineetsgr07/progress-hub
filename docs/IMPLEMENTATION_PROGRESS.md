@@ -57,7 +57,7 @@
 ## Runtime evidence
 
 - Date `2026-08-08`: All total=8 (Daily=2, Projects-on-All=2); Projects chip=9; parked_not_on_all=7
-- Sample parked:Instagram/TikTok, SEO, UGC…
+- Sample parked: Instagram/TikTok, SEO, UGC…
 - All Projects on All had non-null `entry`
 
 ## Decisions and deviations

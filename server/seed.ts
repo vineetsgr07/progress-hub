@@ -10,121 +10,81 @@ type SeedTask = {
   subtasks: string[]
 }
 
-/** Checklist items from Daily Tracker Notes / Details. */
-export const SHEET_SUBTASKS_BY_TITLE: Record<string, string[]> = {
-  'UGC marketing': [
-    'Investigate how to create a UGC ADD, so is there any already existing API which I can use to build a UGC at a lower cost? Can i do a post today.',
-  ],
-  SEO: [
-    'How to be best in SEO in age of AI era, make some research and do a post today.',
-  ],
-  'Instagram/TikTok automation progress': [
-    'Simple automation to post a reel everyday on digital platform, bare minimum automation. Could be manual though.',
-  ],
-  'Client work and progress': [
-    'Review logs and latency and find the root cause',
-  ],
-  'Feature development': [
-    'Complete Device Preview for the Software Engineer APP. Feature for software agent.',
-  ],
-  'Application deployment': [
-    'Improve ASO',
-    'Make a IOS build and do the deployment',
-  ],
-  'Update ID documents': [
-    'Fill in the online form.',
-    'sample-reference',
-  ],
-  'Influencer marketing - post a reel or daily article on LinkedIn': [
-    'Think a simple tech innovation happening in market and post content on x.com',
-  ],
-  'Influencer marketing - post a reel or daily article; it can also be added to your story': [
-    'Think a simple tech innovation happening in market and post content on x.com',
-  ],
-}
+/** Checklist items to attach to existing tasks by title (none by default). */
+export const SHEET_SUBTASKS_BY_TITLE: Record<string, string[]> = {}
 
+/** Made-up sample tasks for a fresh database. */
 const SEED_TASKS: SeedTask[] = [
   {
-    title: 'UGC marketing',
+    title: 'Write the weekly blog post',
     notes: '',
     category: 'Daily',
     project_tag: 'Marketing',
     priority: 'Medium',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['UGC marketing'],
+    subtasks: ['Outline three key points', 'Draft 500 words'],
   },
   {
-    title: 'SEO',
+    title: 'Share one tip on social media',
     notes: '',
     category: 'Daily',
     project_tag: 'Marketing',
-    priority: 'Medium',
-    subtasks: SHEET_SUBTASKS_BY_TITLE.SEO,
-  },
-  {
-    title: 'Influencer marketing - post a reel or daily article on LinkedIn',
-    notes: '',
-    category: 'Daily',
-    project_tag: 'Marketing',
-    priority: 'Medium',
-    subtasks:
-      SHEET_SUBTASKS_BY_TITLE[
-        'Influencer marketing - post a reel or daily article on LinkedIn'
-      ],
-  },
-  {
-    title: 'Instagram/TikTok automation progress',
-    notes: '',
-    category: 'Daily',
-    project_tag: 'Marketing',
-    priority: 'Medium',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['Instagram/TikTok automation progress'],
-  },
-  {
-    title: 'Client work and progress',
-    notes: '',
-    category: 'Daily',
-    project_tag: 'Work/Client',
-    priority: 'High',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['Client work and progress'],
-  },
-  {
-    title: 'Feature development',
-    notes: '',
-    category: 'Daily',
-    project_tag: 'Development',
-    priority: 'High',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['Feature development'],
-  },
-  {
-    title: 'Application deployment',
-    notes: '',
-    category: 'Weekly',
-    project_tag: 'Development',
-    priority: 'High',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['Application deployment'],
-  },
-  {
-    title: 'Planning',
-    notes: 'Improve ASO + weekly roadmap',
-    category: 'Weekly',
-    project_tag: 'Management',
-    priority: 'Medium',
-    subtasks: [],
-  },
-  {
-    title: 'Budget planning',
-    notes: 'Review the month's spending',
-    category: 'Weekly',
-    project_tag: 'Personal',
     priority: 'Low',
     subtasks: [],
   },
   {
-    title: "Capture analytics and plan the upcoming week's work accordingly",
+    title: 'Ship one small feature',
     notes: '',
+    category: 'Daily',
+    project_tag: 'Development',
+    priority: 'High',
+    subtasks: ['Write the test first', 'Open a pull request'],
+  },
+  {
+    title: 'Fix the top open bug',
+    notes: '',
+    category: 'Daily',
+    project_tag: 'Development',
+    priority: 'High',
+    subtasks: [],
+  },
+  {
+    title: 'Morning workout',
+    notes: '20 minutes is enough',
+    category: 'Daily',
+    project_tag: 'Personal',
+    priority: 'Medium',
+    subtasks: ['Stretch', 'Run or walk'],
+  },
+  {
+    title: 'Release build to testers',
+    notes: '',
+    category: 'Weekly',
+    project_tag: 'Development',
+    priority: 'High',
+    subtasks: ['Bump the version', 'Write release notes'],
+  },
+  {
+    title: 'Plan next week',
+    notes: 'Pick the top three goals',
     category: 'Weekly',
     project_tag: 'Management',
     priority: 'Medium',
+    subtasks: [],
+  },
+  {
+    title: 'Review goals vs shipped',
+    notes: 'Weekly look back',
+    category: 'Weekly',
+    project_tag: 'Management',
+    priority: 'Medium',
+    subtasks: [],
+  },
+  {
+    title: 'Grocery run',
+    notes: '',
+    category: 'Weekly',
+    project_tag: 'Personal',
+    priority: 'Low',
     subtasks: [],
   },
   {
@@ -132,28 +92,20 @@ const SEED_TASKS: SeedTask[] = [
     notes: '',
     category: 'Projects',
     project_tag: 'Admin/Legal',
-    priority: 'High',
-    subtasks: [],
-  },
-  {
-    title: 'Review Plan',
-    notes: 'Weekly review of goals vs shipped',
-    category: 'Weekly',
-    project_tag: 'Management',
     priority: 'Medium',
-    subtasks: [],
+    subtasks: ['Find the renewal form', 'Visit the branch'],
   },
   {
-    title: 'Update ID documents',
+    title: 'Learn TypeScript generics',
     notes: '',
     category: 'Projects',
-    project_tag: 'Admin/Legal',
-    priority: 'Medium',
-    subtasks: SHEET_SUBTASKS_BY_TITLE['Update ID documents'],
+    project_tag: 'Personal',
+    priority: 'Low',
+    subtasks: [],
   },
   {
     title: 'Monthly metrics review',
-    notes: 'Funnel + retention check-in',
+    notes: 'Look at the trends, pick one fix',
     category: 'Monthly',
     project_tag: 'Management',
     priority: 'Medium',
