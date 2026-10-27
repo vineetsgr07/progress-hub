@@ -1,6 +1,6 @@
 # Implementation progress — Today All Projects declutter
 
-- **Plan path:** `todo-app/docs/IMPLEMENTATION_PLAN.md`
+- **Plan path:** `docs/IMPLEMENTATION_PLAN.md`
 - **Branch:** `main`
 - **Started:** 2026-08-08
 - **Finished:** 2026-08-08

@@ -1,6 +1,6 @@
 # Daily & Weekly Progress Hub
 
-[![CI](https://github.com/vineetsgr07/todo-app/actions/workflows/ci.yml/badge.svg)](https://github.com/vineetsgr07/todo-app/actions/workflows/ci.yml)
+[![CI](https://github.com/vineetsgr07/progress-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/vineetsgr07/progress-hub/actions/workflows/ci.yml)
 
 A personal todo and progress tracker that replaces a daily-tracker spreadsheet: daily, weekly and monthly tasks with checklists, focus timers, hours logged, habits, reminders, notes and progress charts. Runs locally or as an installable PWA.
 
@@ -62,7 +62,7 @@ This app uses its own Supabase project (`progressive-hub`).
 5. Authentication → URL configuration:
    - **Site URL:** `https://progressive-hub.vercel.app` (not `http://localhost:3000`)
    - **Redirect URLs:** `https://progressive-hub.vercel.app/**` and `http://localhost:5173/**`
-6. GitHub repo is this app root (`vineetsgr07/todo-app`). Vercel project **progressive-hub** deploys on every push to `main`. Production: `https://progressive-hub.vercel.app`. Env vars:
+6. GitHub repo is this app root (`vineetsgr07/progress-hub`). Vercel project **progressive-hub** deploys on every push to `main`. Production: `https://progressive-hub.vercel.app`. Env vars:
 
 | Env | Where |
 |---|---|
